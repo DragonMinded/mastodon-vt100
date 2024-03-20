@@ -1,7 +1,46 @@
-from typing import List, Sequence, Tuple
+from clip import BoundingRectangle
+from vtpy import Terminal
+from typing import List, Sequence, Tuple, TypeVar
 
 
-def wordwrap(text: str, meta: Sequence[object], width: int) -> List[Tuple[str, Sequence[object]]]:
+class ControlCodes:
+    def __init__(self, *, bold: bool = False, underline: bool = False, reverse: bool = False) -> None:
+        self.bold = bold
+        self.underline = underline
+        self.reverse = reverse
+
+    def codesFrom(self, prev: "ControlCodes") -> List[bytes]:
+        if ((not self.bold) and prev.bold) or ((not self.underline) and prev.underline) or ((not self.reverse) and prev.reverse):
+            # If we're turning anything off, then we need to turn everything off and then re-enable
+            # only what we care about.
+            resetcodes: List[bytes] = [Terminal.SET_NORMAL]
+
+            if self.bold:
+                resetcodes.append(Terminal.SET_BOLD)
+            if self.underline:
+                resetcodes.append(Terminal.SET_UNDERLINE)
+            if self.reverse:
+                resetcodes.append(Terminal.SET_REVERSE)
+
+            return resetcodes
+        else:
+            # If we're turning nothing off, and possibly turning something on, then we only need to emit codes for that.
+            normalcodes: List[bytes] = []
+
+            if (not prev.bold) and self.bold:
+                normalcodes.append(Terminal.SET_BOLD)
+            if (not prev.underline) and self.underline:
+                normalcodes.append(Terminal.SET_UNDERLINE)
+            if (not prev.reverse) and self.reverse:
+                normalcodes.append(Terminal.SET_REVERSE)
+
+            return normalcodes
+
+
+TObj = TypeVar("TObj", bound=object)
+
+
+def wordwrap(text: str, meta: Sequence[TObj], width: int) -> List[Tuple[str, Sequence[TObj]]]:
     """
     Given a text string and a maximum allowed width, word-wraps that text by
     returning a list of lines, none of which are longer than the specified
@@ -19,7 +58,7 @@ def wordwrap(text: str, meta: Sequence[object], width: int) -> List[Tuple[str, S
     if len(text) != len(meta):
         raise Exception("Metadata length must match text length!")
 
-    outLines: List[Tuple[str, Sequence[object]]] = []
+    outLines: List[Tuple[str, Sequence[TObj]]] = []
 
     # We don't handle non-unix line endings, so convert them.
     text = text.replace("\r\n", "\n")
@@ -73,7 +112,7 @@ def wordwrap(text: str, meta: Sequence[object], width: int) -> List[Tuple[str, S
         # candidate wrap point that's available. Don't do this if the text is
         # going to fit on it's own.
         if (len(text) > width) and relevantPoints:
-            wrapPoint = relevantPoints[-1]
+            pos = relevantPoints[-1]
 
             if text[pos] in {" ", "\t"}:
                 # We don't include the space at the end of the line, or in the
@@ -123,7 +162,7 @@ def wordwrap(text: str, meta: Sequence[object], width: int) -> List[Tuple[str, S
             wrapPoints = [x - width for x in wrapPoints if (x - width) >= 0]
 
     # Finally, get rid of leading and trailing whitespace.
-    def stripSpace(line: Tuple[str, Sequence[object]]) -> Tuple[str, Sequence[object]]:
+    def stripSpace(line: Tuple[str, Sequence[TObj]]) -> Tuple[str, Sequence[TObj]]:
         text, meta = line
 
         while text and text[0] in {" "}:
@@ -137,6 +176,73 @@ def wordwrap(text: str, meta: Sequence[object], width: int) -> List[Tuple[str, S
         return (text, meta)
 
     return [stripSpace(line) for line in outLines]
+
+
+def display(terminal: Terminal, lines: List[Tuple[str, Sequence[ControlCodes]]], bounds: BoundingRectangle) -> None:
+    # Before anything, verify that the bounds is within the terminal, and if not, skip displaying it. We're
+    # 1-based since that's what the VT-100 manual refers to the top left as (1, 1).
+    if bounds.bottom <= 1:
+        return
+    if bounds.top > terminal.rows:
+        return
+    if bounds.right <= 1:
+        return
+    if bounds.left > terminal.columns:
+        return
+
+    # Now, if we're off the top or the right, then cut off that many bits of the top or left.
+    if bounds.top < 1:
+        amount = -(bounds.top - 1)
+        lines = lines[amount:]
+    if bounds.left < 1:
+        amount = -(bounds.left - 1)
+        lines = [(text[amount:], codes[amount:]) for (text, codes) in lines]
+
+    # Now, clip the rectangle to the screen.
+    bounds = bounds.clip(BoundingRectangle(left=1, top=1, right=terminal.columns + 1, bottom=terminal.rows + 1))
+    if bounds.width == 0 or bounds.height == 0:
+        return
+
+    # Clip off any lines that go off the bottom of the screen.
+    lines = lines[:bounds.height]
+
+    # Now, reset the terminal display.
+    terminal.sendCommand(Terminal.SET_NORMAL)
+    last = ControlCodes(bold=False, underline=False, reverse=False)
+
+    # Move to where we're drawing.
+    row, col = terminal.fetchCursor()
+    if row != bounds.top or col != bounds.left:
+        terminal.moveCursor(bounds.top, bounds.left)
+    row, col = terminal.fetchCursor()
+
+    # Now, for each line, display the text up to the point where the bounds cuts off.
+    for i, (text, codes) in enumerate(lines):
+        # If this isn't the first line, move to the new line.
+        if i != 0:
+            # Shortcut to moving to the next line if the column is 1.
+            row += 1
+            col = bounds.left
+            if col == 1:
+                terminal.sendText("\n")
+            else:
+                terminal.moveCursor(row, col)
+
+        # Now, make sure we don't trail off the right side of the terminal.
+        text = text[:bounds.width]
+        codes = codes[:bounds.width]
+
+        # Finally, actually display the text.
+        for pos in range(len(text)):
+            for code in codes[pos].codesFrom(last):
+                terminal.sendCommand(code)
+            last = codes[pos]
+            terminal.sendText(text[pos])
+
+            # If we support wide text, this is where we would do it, by incrementing double.
+            col += 1
+            if col >= bounds.right:
+                break
 
 
 if __name__ == "__main__":
