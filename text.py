@@ -178,6 +178,97 @@ def wordwrap(text: str, meta: Sequence[TObj], width: int) -> List[Tuple[str, Seq
     return [stripSpace(line) for line in outLines]
 
 
+def __split_formatted_string(string: str) -> List[str]:
+    accumulator: List[str] = []
+    parts: List[str] = []
+
+    for ch in string:
+        if ch == "<":
+            if accumulator:
+                parts.append("".join(accumulator))
+                accumulator = []
+            accumulator.append(ch)
+        elif ch == ">":
+            accumulator.append(ch)
+            if accumulator[0] == "<":
+                parts.append("".join(accumulator))
+                accumulator = []
+        else:
+            accumulator.append(ch)
+
+    if accumulator:
+        parts.append("".join(accumulator))
+    return parts
+
+
+def sanitize(text: str) -> str:
+    text = text.replace("&", "&amp;")
+    text = text.replace("<", "&lt;")
+    text = text.replace(">", "&gt;")
+    return text
+
+
+def unsanitize(text: str) -> str:
+    text = text.replace("&lt;", "<")
+    text = text.replace("&gt;", ">")
+    text = text.replace("&amp;", "&")
+    return text
+
+
+def highlight(text: str) -> Tuple[str, List[ControlCodes]]:
+    parts = __split_formatted_string(text)
+    cur = ControlCodes(bold=False, underline=False, reverse=False)
+
+    bdepth = 0
+    udepth = 0
+    rdepth = 0
+
+    texts: List[str] = []
+    codes: List[ControlCodes] = []
+
+    for part in parts:
+        if part[:1] == "<" and part[-1:] == ">":
+            # Control code modifier.
+            if part in {"<b>", "<bold>"}:
+                bdepth += 1
+                if bdepth == 1:
+                    cur = ControlCodes(bold=True, underline=cur.underline, reverse=cur.reverse)
+            elif part in {"</b>", "</bold>"}:
+                if bdepth == 1:
+                    cur = ControlCodes(bold=False, underline=cur.underline, reverse=cur.reverse)
+                bdepth -= 1
+                if bdepth < 0:
+                    bdepth = 0
+
+            if part in {"<u>", "<underline>"}:
+                udepth += 1
+                if udepth == 1:
+                    cur = ControlCodes(bold=cur.bold, underline=True, reverse=cur.reverse)
+            elif part in {"</u>", "</underline>"}:
+                if udepth == 1:
+                    cur = ControlCodes(bold=cur.bold, underline=False, reverse=cur.reverse)
+                udepth -= 1
+                if udepth < 0:
+                    udepth = 0
+
+            if part in {"<r>", "<reverse>"}:
+                rdepth += 1
+                if rdepth == 1:
+                    cur = ControlCodes(bold=cur.bold, underline=cur.underline, reverse=True)
+            elif part in {"</r>", "</reverse>"}:
+                if rdepth == 1:
+                    cur = ControlCodes(bold=cur.bold, underline=cur.underline, reverse=False)
+                rdepth -= 1
+                if rdepth < 0:
+                    rdepth = 0
+        else:
+            part = unsanitize(part)
+            texts.append(part)
+            codes.extend([cur] * len(part))
+
+    return ("".join(texts), codes)
+
+
 def display(terminal: Terminal, lines: List[Tuple[str, List[ControlCodes]]], bounds: BoundingRectangle) -> None:
     # Before anything, verify that the bounds is within the terminal, and if not, skip displaying it. We're
     # 1-based since that's what the VT-100 manual refers to the top left as (1, 1).
