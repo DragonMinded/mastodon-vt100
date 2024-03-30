@@ -1,0 +1,5 @@
+vtpy @ git+https://github.com/DragonMinded/vtpy.git
+mastodon.py
+mypy
+flake8
+black

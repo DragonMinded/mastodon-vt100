@@ -178,7 +178,7 @@ def wordwrap(text: str, meta: Sequence[TObj], width: int) -> List[Tuple[str, Seq
     return [stripSpace(line) for line in outLines]
 
 
-def display(terminal: Terminal, lines: List[Tuple[str, Sequence[ControlCodes]]], bounds: BoundingRectangle) -> None:
+def display(terminal: Terminal, lines: List[Tuple[str, List[ControlCodes]]], bounds: BoundingRectangle) -> None:
     # Before anything, verify that the bounds is within the terminal, and if not, skip displaying it. We're
     # 1-based since that's what the VT-100 manual refers to the top left as (1, 1).
     if bounds.bottom <= 1:
@@ -206,15 +206,17 @@ def display(terminal: Terminal, lines: List[Tuple[str, Sequence[ControlCodes]]],
     # Clip off any lines that go off the bottom of the screen.
     lines = lines[:bounds.height]
 
-    # Now, reset the terminal display.
-    terminal.sendCommand(Terminal.SET_NORMAL)
-    last = ControlCodes(bold=False, underline=False, reverse=False)
+    # Now, figure out where we left off last time we drew anything.
+    last = ControlCodes(bold=terminal.bolded, underline=terminal.underlined, reverse=terminal.reversed)
 
     # Move to where we're drawing.
     row, col = terminal.fetchCursor()
     if row != bounds.top or col != bounds.left:
-        terminal.moveCursor(bounds.top, bounds.left)
-    row, col = terminal.fetchCursor()
+        if row == (bounds.top - 1) and bounds.left == 1:
+            terminal.sendText("\n")
+        else:
+            terminal.moveCursor(bounds.top, bounds.left)
+        row, col = (bounds.top, bounds.left)
 
     # Now, for each line, display the text up to the point where the bounds cuts off.
     for i, (text, codes) in enumerate(lines):

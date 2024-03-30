@@ -1,6 +1,7 @@
 *.swp
 *.swo
 build/
+secrets/
 *.pyc
 *.pyo
 *.egg-info/
