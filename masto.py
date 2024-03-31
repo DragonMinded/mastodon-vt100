@@ -48,7 +48,7 @@ class Component:
     def goToBottom(self) -> None:
         pass
 
-    def processInput(self, inputStr: str) -> Optional[Action]:
+    def processInput(self, inputVal: bytes) -> Optional[Action]:
         return None
 
 
@@ -178,6 +178,66 @@ class TimelineComponent(Component):
             post.draw(pos + self.top, pos + self.top + post.height, 0)
             pos += post.height
 
+    def _drawOneLine(self, line: int) -> None:
+        pos = -self.offset
+        viewHeight = (self.bottom - self.top) + 1
+
+        for post in self.posts:
+            if pos >= viewHeight:
+                # Too low below the viewport.
+                break
+            if pos + post.height <= 0:
+                # Too high above the viewport.
+                pos += post.height
+                continue
+
+            # Figure out what line of this post we're drawing.
+            offset = line - (pos + self.top)
+            if offset < 0:
+                # This post is below where we want to draw.
+                break
+            if offset >= post.height:
+                # This post is above where we want to draw, we finished.
+                pos += post.height
+                continue
+
+            post.draw(line, line + 1, offset)
+            pos += post.height
+
+    def processInput(self, inputVal: bytes) -> Optional[Action]:
+        if inputVal == Terminal.UP:
+            # Scroll up one line.
+            if self.offset > 0:
+                self.offset -= 1
+
+                self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+                self.terminal.sendCommand(Terminal.SET_NORMAL)
+                self.terminal.setScrollRegion(self.top, self.bottom)
+                self.terminal.moveCursor(self.top, 1)
+                self.terminal.sendCommand(Terminal.MOVE_CURSOR_UP)
+                self._drawOneLine(self.top)
+                self.terminal.clearScrollRegion()
+                self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
+
+                return NullAction()
+        elif inputVal == Terminal.DOWN:
+            # Scroll down one line.
+            if self.offset < 0xFFFFFFFF:
+                self.offset += 1
+
+                self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+                self.terminal.sendCommand(Terminal.SET_NORMAL)
+                self.terminal.setScrollRegion(self.top, self.bottom)
+                self.terminal.moveCursor(self.bottom, 1)
+                self.terminal.sendCommand(Terminal.MOVE_CURSOR_DOWN)
+                self._drawOneLine(self.bottom)
+                self.terminal.clearScrollRegion()
+                self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
+
+                return NullAction()
+
+        return None
+
 
 class Renderer:
     def __init__(self, terminal: Terminal, client: Client) -> None:
@@ -185,14 +245,22 @@ class Renderer:
         self.client = client
 
         # Also, hardcode the timeline renderer for now.
-        self.components = [
+        self.components: List[Component] = [
             TimelineComponent(self.terminal, self.client, top=1, bottom=self.terminal.rows)
         ]
 
     def processInput(self, inputVal: bytes) -> Optional[Action]:
-        if inputVal == b"~":
+        # First, try handling it with the registered components.
+        for component in self.components:
+            possible = component.processInput(inputVal)
+            if possible:
+                return possible
+
+        # Now, handle it with our own code.
+        if inputVal == b"\x03":
             return ExitAction()
 
+        # Nothing to do
         return None
 
 
