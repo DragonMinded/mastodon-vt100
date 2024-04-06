@@ -1,6 +1,7 @@
 from clip import BoundingRectangle
 from vtpy import Terminal
-from typing import List, Sequence, Tuple, TypeVar
+from html.parser import HTMLParser
+from typing import List, Optional, Sequence, Tuple, TypeVar
 
 
 class ControlCodes:
@@ -201,6 +202,12 @@ def __split_formatted_string(string: str) -> List[str]:
     return parts
 
 
+def striplow(text: str) -> str:
+    for i in range(32):
+        text = text.replace(chr(i), "")
+    return text
+
+
 def sanitize(text: str) -> str:
     text = text.replace("&", "&amp;")
     text = text.replace("<", "&lt;")
@@ -267,6 +274,151 @@ def highlight(text: str) -> Tuple[str, List[ControlCodes]]:
             codes.extend([cur] * len(part))
 
     return ("".join(texts), codes)
+
+
+class MastodonParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.text = ""
+        self.codes: List[ControlCodes] = []
+        self.pending: Optional[ControlCodes] = None
+        self.bdepth = 0
+        self.udepth = 0
+        self.rdepth = 0
+
+    def __last_code(self) -> ControlCodes:
+        if self.pending:
+            code = self.pending
+            self.pending = None
+            return code
+        if self.codes:
+            return self.codes[-1]
+        return ControlCodes(bold=False, underline=False, reverse=False)
+
+    def __bold_last_code(self) -> ControlCodes:
+        code = self.__last_code()
+
+        self.bdepth += 1
+        if self.bdepth == 1:
+            return ControlCodes(bold=True, underline=code.underline, reverse=code.reverse)
+        return code
+
+    def __unbold_last_code(self) -> ControlCodes:
+        code = self.__last_code()
+
+        if self.bdepth == 1:
+            self.bdepth = 0
+            return ControlCodes(bold=False, underline=code.underline, reverse=code.reverse)
+        elif self.bdepth > 0:
+            self.bdepth -= 1
+        return code
+
+    def __underline_last_code(self) -> ControlCodes:
+        code = self.__last_code()
+
+        self.udepth += 1
+        if self.udepth == 1:
+            return ControlCodes(bold=code.bold, underline=True, reverse=code.reverse)
+        return code
+
+    def __ununderline_last_code(self) -> ControlCodes:
+        code = self.__last_code()
+
+        if self.udepth == 1:
+            self.udepth = 0
+            return ControlCodes(bold=code.bold, underline=False, reverse=code.reverse)
+        elif self.udepth > 0:
+            self.udepth -= 1
+        return code
+
+    def __reverse_last_code(self) -> ControlCodes:
+        code = self.__last_code()
+
+        self.rdepth += 1
+        if self.rdepth == 1:
+            return ControlCodes(bold=code.bold, underline=code.underline, reverse=True)
+        return code
+
+    def __unreverse_last_code(self) -> ControlCodes:
+        code = self.__last_code()
+
+        if self.rdepth == 1:
+            self.rdepth = 0
+            return ControlCodes(bold=code.bold, underline=code.underline, reverse=False)
+        elif self.rdepth > 0:
+            self.rdepth -= 1
+        return code
+
+    def handle_starttag(self, tag: str, attrs: List[Tuple[str, Optional[str]]]) -> None:
+        if tag in {"p", "span"}:
+            pass
+        elif tag == "br":
+            # Simple, handle this by adding.
+            self.text += "\n"
+            self.codes += [self.__last_code()]
+        elif tag == "a":
+            # Right now, just underline links.
+            self.pending = self.__underline_last_code()
+        elif tag == "b":
+            # Bold it!
+            self.pending = self.__bold_last_code()
+        elif tag in {"i", "em"}:
+            # Reverse the text for emphasis!
+            self.pending = self.__reverse_last_code()
+        elif tag == "u":
+            # Underline it!
+            self.pending = self.__underline_last_code()
+        else:
+            print("Unsupported start tag", tag)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "p":
+            # Simple, handle this by adding.
+            self.text += "\n\n"
+            code = self.__last_code()
+            self.codes += [code, code]
+        elif tag == "a":
+            # Right now, just underline links.
+            self.pending = self.__ununderline_last_code()
+        elif tag == "b":
+            # Bold it!
+            self.pending = self.__unbold_last_code()
+        elif tag in {"i", "em"}:
+            # Reverse the text for emphasis!
+            self.pending = self.__unreverse_last_code()
+        elif tag == "u":
+            # Underline it!
+            self.pending = self.__ununderline_last_code()
+        elif tag in {"span", "br"}:
+            pass
+        else:
+            print("Unsupported end tag", tag)
+
+    def handle_data(self, data: str) -> None:
+        self.text += data
+        code = self.__last_code()
+        self.codes += [code] * len(data)
+
+    def parsed(self) -> Tuple[str, List[ControlCodes]]:
+        text = self.text
+        codes = self.codes
+
+        while text and text[0].isspace():
+            text = text[1:]
+            codes = codes[1:]
+        while text and text[-1].isspace():
+            text = text[:-1]
+            codes = codes[:-1]
+
+        return (text, codes)
+
+
+def html(data: str) -> Tuple[str, List[ControlCodes]]:
+    parser = MastodonParser()
+    parser.feed(data)
+    parser.close()
+
+    return parser.parsed()
 
 
 def display(terminal: Terminal, lines: List[Tuple[str, List[ControlCodes]]], bounds: BoundingRectangle) -> None:
