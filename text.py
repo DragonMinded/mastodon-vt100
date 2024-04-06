@@ -202,8 +202,11 @@ def __split_formatted_string(string: str) -> List[str]:
     return parts
 
 
-def striplow(text: str) -> str:
+def striplow(text: str, allow_safe: bool = False) -> str:
     for i in range(32):
+        # Allow newline characters, allow tabs.
+        if allow_safe and i in {9, 10}:
+            continue
         text = text.replace(chr(i), "")
     return text
 

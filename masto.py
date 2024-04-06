@@ -110,6 +110,7 @@ class TimelinePost:
                 boostline,
                 nameline,
                 *postbody,
+                *self.__format_attachments(reblog['media_attachments']),
             ]
 
             # Now, surround the post in a box.
@@ -132,6 +133,7 @@ class TimelinePost:
             textlines = [
                 nameline,
                 *postbody,
+                *self.__format_attachments(self.data['media_attachments']),
             ]
 
             # Now, surround the post in a box.
@@ -140,6 +142,22 @@ class TimelinePost:
                 *[boxmiddle(line, terminal.columns) for line in textlines],
                 boxbottom(terminal.columns),
             ]
+
+    def __format_attachments(self, attachments: List[Dict[str, Any]]) -> List[Tuple[str, List[ControlCodes]]]:
+        attachmentLines = []
+        for attachment in attachments:
+            alt = striplow(attachment['description'] or 'no description', allow_safe=True)
+            url = (attachment['url'] or '').split("/")[-1]
+            description, codes = highlight(f"<u>{url}</u>: {alt}")
+
+            attachmentbody = wordwrap(description, codes, self.terminal.columns - 4)
+            attachmentLines += [
+                boxtop(self.terminal.columns - 2),
+                *[boxmiddle(line, self.terminal.columns - 2) for line in attachmentbody],
+                boxbottom(self.terminal.columns - 2),
+            ]
+
+        return attachmentLines
 
     @property
     def height(self) -> int:
