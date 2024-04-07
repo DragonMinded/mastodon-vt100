@@ -597,6 +597,80 @@ class LoginComponent(Component):
         return None
 
 
+class ErrorComponent(Component):
+    def __init__(
+        self,
+        renderer: "Renderer",
+        top: int,
+        bottom: int,
+        *,
+        error: str = "",
+    ) -> None:
+        super().__init__(renderer, top, bottom)
+
+        # Set up for what input we're handling.
+        self.error = error
+
+        # Now, draw the components.
+        self.draw()
+
+    def __summonBox(self) -> List[Tuple[str, List[ControlCodes]]]:
+        # First, create the "quit" button.
+        quit = [
+            boxtop(6),
+            boxmiddle(highlight("<b>quit</b>"), 6),
+            boxbottom(6),
+        ]
+
+        # Now, create the "middle bit" between the buttons.
+        middle = highlight(pad("", 36 - 6))
+
+        text, codes = highlight(self.error)
+        textbits = wordwrap(text, codes, 36)
+
+        # Now, create the error box itself.
+        lines = [
+            boxtop(38),
+            *[boxmiddle(bit, 38) for bit in textbits],
+            boxmiddle(highlight(""), 38),
+            *[boxmiddle(join([middle, quit[x]]), 38) for x in range(len(quit))],
+            boxbottom(38),
+        ]
+
+        return lines
+
+    def draw(self) -> None:
+        # First, clear the screen and draw our logo.
+        for row in range(self.top, self.bottom + 1):
+            self.terminal.moveCursor(row, 1)
+            self.terminal.sendCommand(Terminal.CLEAR_LINE)
+        self.terminal.moveCursor((self.top - 1) + 3, 11)
+        self.terminal.sendCommand(Terminal.DOUBLE_HEIGHT_TOP)
+        self.terminal.sendText("Mastodon for VT-100")
+        self.terminal.moveCursor((self.top - 1) + 4, 11)
+        self.terminal.sendCommand(Terminal.DOUBLE_HEIGHT_BOTTOM)
+        self.terminal.sendText("Mastodon for VT-100")
+
+        lines = self.__summonBox()
+        bounds = BoundingRectangle(
+            top=(self.top - 1) + 5, bottom=(self.top - 1) + 16, left=21, right=59
+        )
+        display(self.terminal, lines, bounds)
+
+        # Now, put the cursor in the right spot.
+        self.terminal.moveCursor((self.top - 1) + 5 + (len(lines) - 3), 53)
+
+    def processInput(self, inputVal: bytes) -> Optional[Action]:
+        if inputVal == b"\r":
+            # Ignore this.
+            return NullAction()
+        elif inputVal == b"\n":
+            # Client wants out.
+            return ExitAction()
+
+        return None
+
+
 class Renderer:
     def __init__(self, terminal: Terminal, client: Client) -> None:
         self.terminal = terminal
@@ -657,6 +731,21 @@ def spawnLoginScreen(
     ]
 
 
+def spawnErrorScreen(
+    renderer: Renderer,
+    *,
+    error: str = "Unknown error.",
+) -> None:
+    renderer.components = [
+        ErrorComponent(
+            renderer,
+            top=1,
+            bottom=renderer.rows,
+            error=error,
+        )
+    ]
+
+
 def spawnTimelineScreen(renderer: Renderer) -> None:
     renderer.components = [TimelineComponent(renderer, top=1, bottom=renderer.rows)]
 
@@ -693,9 +782,15 @@ def main(
         terminal = spawnTerminal(port, baudrate, flow)
         renderer = Renderer(terminal, client)
         if not renderer.components:
-            spawnLoginScreen(
-                renderer, server=server, username=username, password=password
-            )
+            if client.valid:
+                spawnLoginScreen(
+                    renderer, server=server, username=username, password=password
+                )
+            else:
+                spawnErrorScreen(
+                    renderer,
+                    error=f"Cannot connect to server {server}.",
+                )
 
         try:
             while not exiting:

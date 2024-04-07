@@ -1,7 +1,7 @@
 import os
 from enum import Enum, auto
 from mastodon import Mastodon  # type: ignore
-from mastodon.errors import MastodonIllegalArgumentError  # type: ignore
+from mastodon.errors import MastodonNetworkError, MastodonIllegalArgumentError  # type: ignore
 from urllib.parse import urlparse
 from typing import Any, Dict, List, cast
 
@@ -11,6 +11,10 @@ class Timeline(Enum):
 
 
 class BadLoginError(Exception):
+    pass
+
+
+class InvalidClientError(Exception):
     pass
 
 
@@ -36,27 +40,40 @@ class Client:
 
         # If the file doesn't exist, we need to register with the server, this should be
         # a one-time thing.
-        if not os.path.isfile(creds_file):
-            Mastodon.create_app(
-                self.CLIENT_NAME, api_base_url=server, to_file=creds_file
-            )
+        try:
+            if not os.path.isfile(creds_file):
+                Mastodon.create_app(
+                    self.CLIENT_NAME, api_base_url=server, to_file=creds_file
+                )
 
-        # Now, save the client itself.
-        self.client = Mastodon(client_id=creds_file)
+            # Now, save the client itself.
+            self.__client = Mastodon(client_id=creds_file)
+            self.valid = True
+        except MastodonNetworkError:
+            self.__client = None
+            self.valid = False
 
     def __get_client_creds_file(self, server: str) -> str:
         url = urlparse(server)
         return f"{url.hostname}.clientcred.secret"
 
+    def __assert_valid(self) -> None:
+        if not self.valid:
+            raise InvalidClientError(f"Invalid client for {self.server}")
+
     def login(self, username: str, password: str) -> None:
+        self.__assert_valid()
+
         try:
-            self.client.log_in(username, password)
+            self.__client.log_in(username, password)
         except MastodonIllegalArgumentError:
             raise BadLoginError("Bad username or password!")
 
     def fetchTimeline(self, which: Timeline) -> List[Dict[str, Any]]:
+        self.__assert_valid()
+
         if which == Timeline.HOME:
-            statuses = self.client.timeline(timeline="home")
+            statuses = self.__client.timeline(timeline="home")
         else:
             raise Exception("Unknown timeline to fetch!")
 
