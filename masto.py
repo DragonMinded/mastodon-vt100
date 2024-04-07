@@ -290,36 +290,120 @@ class TimelineComponent(Component):
         return None
 
 
+class OneLineInputBox:
+    def __init__(self, renderer: "Renderer", text: str, length: int, *, obfuscate: bool = False) -> None:
+        self.renderer = renderer
+        self.text = text[:length]
+        self.cursor = len(self.text)
+        self.length = length
+        self.obfuscate = obfuscate
+
+    @property
+    def lines(self) -> List[Tuple[str, List[ControlCodes]]]:
+        if self.obfuscate:
+            return [
+                highlight("<r>" + pad(obfuscate(self.text), 36) + "</r>")
+            ]
+        else:
+            return [
+                highlight("<r>" + pad(self.text, 36) + "</r>")
+            ]
+
+    def draw(self, row: int, column: int) -> None:
+        bounds = BoundingRectangle(top=row, bottom=row + 1, left=column, right=column + self.length + 1)
+        display(self.renderer.terminal, self.lines, bounds)
+        self.renderer.terminal.moveCursor(row, column + self.cursor)
+
+    def processInput(self, inputVal: bytes, row: int, column: int) -> Optional[Action]:
+        if inputVal == Terminal.LEFT:
+            if self.cursor > 0:
+                self.cursor -= 1
+                self.renderer.terminal.moveCursor(row, column + self.cursor)
+        elif inputVal == Terminal.RIGHT:
+            if self.cursor < len(self.text):
+                self.cursor += 1
+                self.renderer.terminal.moveCursor(row, column + self.cursor)
+        elif inputVal in {Terminal.BACKSPACE, Terminal.DELETE}:
+            if self.text:
+                # Just subtract from input.
+                if self.cursor == len(self.text):
+                    # Erasing at the end of the line.
+                    self.text = self.text[:-1]
+
+                    self.cursor -= 1
+                    self.draw(row, column)
+                elif self.cursor == 0:
+                    # Erasing at the beginning, do nothing.
+                    pass
+                elif self.cursor == 1:
+                    # Erasing at the beginning of the line.
+                    self.text = self.text[1:]
+
+                    self.cursor -= 1
+                    self.draw(row, column)
+                else:
+                    # Erasing in the middle of the line.
+                    spot = self.cursor - 1
+                    self.text = self.text[:spot] + self.text[(spot + 1) :]
+
+                    self.cursor -= 1
+                    self.draw(row, column)
+
+            return NullAction()
+        else:
+            if len(self.text) < (self.length - 1):
+                # If we got some unprintable character, ignore it.
+                inputVal = bytes(v for v in inputVal if v >= 0x20)
+                if inputVal:
+                    # Just add to input.
+                    char = inputVal.decode("ascii")
+
+                    if self.cursor == len(self.text):
+                        # Just appending to the input.
+                        self.text += char
+                        self.cursor += 1
+                        self.draw(row, column)
+                    else:
+                        # Adding to mid-input.
+                        spot = self.cursor
+                        self.text = self.text[:spot] + char + self.text[spot:]
+                        self.cursor += 1
+                        self.draw(row, column)
+
+            return NullAction()
+
+        return None
+
+
 class LoginComponent(Component):
     def __init__(self, renderer: "Renderer", top: int, bottom: int, *, server: str = "", username: str = "", password: str = "") -> None:
         super().__init__(renderer, top, bottom)
 
         # Set up for what input we're handling.
-        self.username = username
-        self.userCursor = len(username)
-        self.password = password
-        self.passCursor = len(password)
+        self.server = server
+        self.username = OneLineInputBox(renderer, username, 36)
+        self.password = OneLineInputBox(renderer, password, 36, obfuscate=True)
 
         # Set up which component we're on.
         self.component = 0 if len(username) == 0 else (1 if len(password) == 0 else 2)
 
         # Now, draw the components.
         self.draw()
-        self.renderer.status(f"Please enter your credentials for {server or 'server'}.")
+        self.renderer.status(f"Please enter your credentials for {self.server}.")
 
     def __login(self) -> bool:
         # Attempt to log in.
         try:
-            self.client.login(self.username, self.password)
+            self.client.login(self.username.text, self.password.text)
             return True
         except BadLoginError:
             return False
 
     def __moveCursor(self) -> None:
         if self.component == 0:
-            self.terminal.moveCursor((self.top - 1) + 7, 22 + self.userCursor)
+            self.terminal.moveCursor((self.top - 1) + 7, 22 + self.username.cursor)
         elif self.component == 1:
-            self.terminal.moveCursor((self.top - 1) + 10, 22 + self.passCursor)
+            self.terminal.moveCursor((self.top - 1) + 10, 22 + self.password.cursor)
         elif self.component == 2:
             self.terminal.moveCursor((self.top - 1) + 13, 23)
         elif self.component == 3:
@@ -345,10 +429,10 @@ class LoginComponent(Component):
         lines = [
             boxtop(38),
             boxmiddle(highlight("Username:"), 38),
-            boxmiddle(highlight("<r>" + pad(self.username, 36)), 38),
+            boxmiddle(self.username.lines[0], 38),
             boxmiddle(highlight(""), 38),
             boxmiddle(highlight("Password:"), 38),
-            boxmiddle(highlight("<r>" + pad(obfuscate(self.password), 36)), 38),
+            boxmiddle(self.password.lines[0], 38),
             boxmiddle(highlight(""), 38),
             *[boxmiddle(join([login[x], middle, quit[x]]), 38) for x in range(len(login))],
             boxbottom(38),
@@ -390,6 +474,10 @@ class LoginComponent(Component):
             if self.component > 0:
                 self.component -= 1
 
+                # Redraw prompt, in case they typed a bad username and password.
+                if self.component == 1:
+                    self.renderer.status(f"Please enter your credentials for {self.server}.")
+
                 # We only need to redraw buttons if we left one behind.
                 if self.component != 0:
                     self.__redrawButtons()
@@ -427,6 +515,9 @@ class LoginComponent(Component):
                 self.component = 0
                 self.__redrawButtons()
 
+                # Redraw prompt, in case they typed a bad username and password.
+                self.renderer.status(f"Please enter your credentials for {self.server}.")
+
             return NullAction()
         elif inputVal == b"\n":
             # Client pressed enter.
@@ -459,6 +550,11 @@ class LoginComponent(Component):
                 return ExitAction()
 
             return NullAction()
+        else:
+            if self.component == 0:
+                return self.username.processInput(inputVal, (self.top - 1) + 7, 22)
+            elif self.component == 1:
+                return self.password.processInput(inputVal, (self.top - 1) + 10, 22)
 
         return None
 
@@ -470,6 +566,7 @@ class Renderer:
 
         # Start with no components.
         self.components: List[Component] = []
+        self.lastStatus: Optional[str] = None
         self.status("")
 
     @property
@@ -481,6 +578,10 @@ class Renderer:
         return self.terminal.columns
 
     def status(self, text: str) -> None:
+        if text == self.lastStatus:
+            return
+
+        self.lastStatus = text
         self.terminal.sendCommand(Terminal.SAVE_CURSOR)
         self.terminal.moveCursor(self.terminal.rows, 1)
         self.terminal.sendCommand(Terminal.SET_NORMAL)
