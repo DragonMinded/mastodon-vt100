@@ -1,12 +1,17 @@
 import os
 from enum import Enum, auto
 from mastodon import Mastodon  # type: ignore
+from mastodon.errors import MastodonIllegalArgumentError  # type: ignore
 from urllib.parse import urlparse
 from typing import Any, Dict, List, cast
 
 
 class Timeline(Enum):
     HOME = auto()
+
+
+class BadLoginError(Exception):
+    pass
 
 
 class Client:
@@ -44,7 +49,10 @@ class Client:
         return f"{url.hostname}.clientcred.secret"
 
     def login(self, username: str, password: str) -> None:
-        self.client.log_in(username, password)
+        try:
+            self.client.log_in(username, password)
+        except MastodonIllegalArgumentError:
+            raise BadLoginError("Bad username or password!")
 
     def fetchTimeline(self, which: Timeline) -> List[Dict[str, Any]]:
         if which == Timeline.HOME:

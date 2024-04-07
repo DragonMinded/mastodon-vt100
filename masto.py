@@ -3,11 +3,11 @@ import sys
 import time
 
 from vtpy import SerialTerminal, Terminal, TerminalException
-from client import Client, Timeline
+from client import Client, Timeline, BadLoginError
 from clip import BoundingRectangle
 from text import ControlCodes, display, highlight, html, sanitize, striplow, wordwrap
 
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 
 class Action:
@@ -22,10 +22,16 @@ class ExitAction(Action):
     pass
 
 
+class SwapScreenAction(Action):
+    def __init__(self, swap: Callable[["Renderer"], None]) -> None:
+        self.swap = swap
+
+
 class Component:
-    def __init__(self, terminal: Terminal, client: Client, top: int, bottom: int) -> None:
-        self.terminal = terminal
-        self.client = client
+    def __init__(self, renderer: "Renderer", top: int, bottom: int) -> None:
+        self.renderer = renderer
+        self.terminal = renderer.terminal
+        self.client = renderer.client
         self.top = top
         self.bottom = bottom
         self.rows = (bottom - top) + 1
@@ -84,9 +90,27 @@ def boxmiddle(line: Tuple[str, Sequence[ControlCodes]], width: int) -> Tuple[str
     return (text, codes)
 
 
+def pad(line: str, length: int) -> str:
+    if len(line) >= length:
+        return line[:length]
+    amount = length - len(line)
+    return line + (" " * amount)
+
+
+def obfuscate(line: str) -> str:
+    return "*" * len(line)
+
+
+def join(chunks: List[Tuple[str, Sequence[ControlCodes]]]) -> Tuple[str, List[ControlCodes]]:
+    accum: Tuple[str, List[ControlCodes]] = ("", [])
+    for chunk in chunks:
+        accum = (accum[0] + chunk[0], [*accum[1], *chunk[1]])
+    return accum
+
+
 class TimelinePost:
-    def __init__(self, terminal: Terminal, data: Dict[str, Any]) -> None:
-        self.terminal = terminal
+    def __init__(self, renderer: "Renderer", data: Dict[str, Any]) -> None:
+        self.renderer = renderer
         self.data = data
 
         reblog = self.data['reblog']
@@ -103,7 +127,7 @@ class TimelinePost:
 
             content = striplow(reblog['content'])
             content, codes = html(content)
-            postbody = wordwrap(content, codes, terminal.columns - 2)
+            postbody = wordwrap(content, codes, renderer.columns - 2)
 
             # Actual contents.
             textlines = [
@@ -115,9 +139,9 @@ class TimelinePost:
 
             # Now, surround the post in a box.
             self.lines = [
-                boxtop(terminal.columns),
-                *[boxmiddle(line, terminal.columns) for line in textlines],
-                boxbottom(terminal.columns),
+                boxtop(renderer.columns),
+                *[boxmiddle(line, renderer.columns) for line in textlines],
+                boxbottom(renderer.columns),
             ]
         else:
             # First, start with the name of the account.
@@ -127,7 +151,7 @@ class TimelinePost:
 
             content = striplow(self.data['content'])
             content, codes = html(content)
-            postbody = wordwrap(content, codes, terminal.columns - 2)
+            postbody = wordwrap(content, codes, renderer.columns - 2)
 
             # Actual contents.
             textlines = [
@@ -138,9 +162,9 @@ class TimelinePost:
 
             # Now, surround the post in a box.
             self.lines = [
-                boxtop(terminal.columns),
-                *[boxmiddle(line, terminal.columns) for line in textlines],
-                boxbottom(terminal.columns),
+                boxtop(renderer.columns),
+                *[boxmiddle(line, renderer.columns) for line in textlines],
+                boxbottom(renderer.columns),
             ]
 
     def __format_attachments(self, attachments: List[Dict[str, Any]]) -> List[Tuple[str, List[ControlCodes]]]:
@@ -150,11 +174,11 @@ class TimelinePost:
             url = (attachment['url'] or '').split("/")[-1]
             description, codes = highlight(f"<u>{url}</u>: {alt}")
 
-            attachmentbody = wordwrap(description, codes, self.terminal.columns - 4)
+            attachmentbody = wordwrap(description, codes, self.renderer.columns - 4)
             attachmentLines += [
-                boxtop(self.terminal.columns - 2),
-                *[boxmiddle(line, self.terminal.columns - 2) for line in attachmentbody],
-                boxbottom(self.terminal.columns - 2),
+                boxtop(self.renderer.columns - 2),
+                *[boxmiddle(line, self.renderer.columns - 2) for line in attachmentbody],
+                boxbottom(self.renderer.columns - 2),
             ]
 
         return attachmentLines
@@ -164,23 +188,25 @@ class TimelinePost:
         return len(self.lines)
 
     def draw(self, top: int, bottom: int, offset: int) -> None:
-        bounds = BoundingRectangle(top=top, bottom=bottom, left=1, right=self.terminal.columns + 1)
-        display(self.terminal, self.lines[offset:], bounds)
+        bounds = BoundingRectangle(top=top, bottom=bottom + 1, left=1, right=self.renderer.columns + 1)
+        display(self.renderer.terminal, self.lines[offset:], bounds)
 
 
 class TimelineComponent(Component):
-    def __init__(self, terminal: Terminal, client: Client, top: int, bottom: int) -> None:
-        super().__init__(terminal, client, top, bottom)
+    def __init__(self, renderer: "Renderer", top: int, bottom: int) -> None:
+        super().__init__(renderer, top, bottom)
 
         # First, fetch the timeline.
         self.offset = 0
-        self.statuses = client.fetchTimeline(Timeline.HOME)
+        self.statuses = self.client.fetchTimeline(Timeline.HOME)
+        self.renderer.status("Timeline fetched, drawing...")
 
         # Now, format each post into it's own component.
-        self.posts = [TimelinePost(terminal, status) for status in self.statuses]
+        self.posts = [TimelinePost(self.renderer, status) for status in self.statuses]
 
         # Now, draw them.
         self.draw()
+        self.renderer.status("")
 
     def draw(self) -> None:
         pos = -self.offset
@@ -195,7 +221,12 @@ class TimelineComponent(Component):
                 pos += post.height
                 continue
 
-            post.draw(pos + self.top, pos + self.top + post.height, 0)
+            top = pos + self.top
+            bottom = top + post.height
+            if bottom > self.bottom:
+                bottom = self.bottom
+
+            post.draw(top, bottom, 0)
             pos += post.height
 
     def _drawOneLine(self, line: int) -> None:
@@ -221,7 +252,7 @@ class TimelineComponent(Component):
                 pos += post.height
                 continue
 
-            post.draw(line, line + 1, offset)
+            post.draw(line, line, offset)
             pos += post.height
 
     def processInput(self, inputVal: bytes) -> Optional[Action]:
@@ -239,7 +270,7 @@ class TimelineComponent(Component):
                 self.terminal.clearScrollRegion()
                 self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
 
-                return NullAction()
+            return NullAction()
         elif inputVal == Terminal.DOWN:
             # Scroll down one line.
             if self.offset < 0xFFFFFFFF:
@@ -254,7 +285,180 @@ class TimelineComponent(Component):
                 self.terminal.clearScrollRegion()
                 self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
 
-                return NullAction()
+            return NullAction()
+
+        return None
+
+
+class LoginComponent(Component):
+    def __init__(self, renderer: "Renderer", top: int, bottom: int, *, server: str = "", username: str = "", password: str = "") -> None:
+        super().__init__(renderer, top, bottom)
+
+        # Set up for what input we're handling.
+        self.username = username
+        self.userCursor = len(username)
+        self.password = password
+        self.passCursor = len(password)
+
+        # Set up which component we're on.
+        self.component = 0 if len(username) == 0 else (1 if len(password) == 0 else 2)
+
+        # Now, draw the components.
+        self.draw()
+        self.renderer.status(f"Please enter your credentials for {server or 'server'}.")
+
+    def __login(self) -> bool:
+        # Attempt to log in.
+        try:
+            self.client.login(self.username, self.password)
+            return True
+        except BadLoginError:
+            return False
+
+    def __moveCursor(self) -> None:
+        if self.component == 0:
+            self.terminal.moveCursor((self.top - 1) + 7, 22 + self.userCursor)
+        elif self.component == 1:
+            self.terminal.moveCursor((self.top - 1) + 10, 22 + self.passCursor)
+        elif self.component == 2:
+            self.terminal.moveCursor((self.top - 1) + 13, 23)
+        elif self.component == 3:
+            self.terminal.moveCursor((self.top - 1) + 13, 53)
+
+    def __summonBox(self) -> List[Tuple[str, List[ControlCodes]]]:
+        # First, create the "log in" and "quit" buttons.
+        login = [
+            boxtop(7),
+            boxmiddle(highlight("<b>login</b>" if self.component == 2 else "login"), 7),
+            boxbottom(7),
+        ]
+        quit = [
+            boxtop(6),
+            boxmiddle(highlight("<b>quit</b>" if self.component == 3 else "quit"), 6),
+            boxbottom(6),
+        ]
+
+        # Now, create the "middle bit" between the buttons.
+        middle = highlight(pad("", 36 - 7 - 6))
+
+        # Now, create the login box itself.
+        lines = [
+            boxtop(38),
+            boxmiddle(highlight("Username:"), 38),
+            boxmiddle(highlight("<r>" + pad(self.username, 36)), 38),
+            boxmiddle(highlight(""), 38),
+            boxmiddle(highlight("Password:"), 38),
+            boxmiddle(highlight("<r>" + pad(obfuscate(self.password), 36)), 38),
+            boxmiddle(highlight(""), 38),
+            *[boxmiddle(join([login[x], middle, quit[x]]), 38) for x in range(len(login))],
+            boxbottom(38),
+        ]
+
+        return lines
+
+    def __redrawButtons(self) -> None:
+        lines = self.__summonBox()
+        lines = lines[8:9]
+        bounds = BoundingRectangle(top=(self.top - 1) + 13, bottom=(self.top - 1) + 14, left=21, right=59)
+        display(self.terminal, lines, bounds)
+
+        # Now, put the cursor back.
+        self.__moveCursor()
+
+    def draw(self) -> None:
+        # First, clear the screen and draw our logo.
+        for row in range(self.top, self.bottom + 1):
+            self.terminal.moveCursor(row, 1)
+            self.terminal.sendCommand(Terminal.CLEAR_LINE)
+        self.terminal.moveCursor((self.top - 1) + 3, 11)
+        self.terminal.sendCommand(Terminal.DOUBLE_HEIGHT_TOP)
+        self.terminal.sendText("Mastodon for VT-100")
+        self.terminal.moveCursor((self.top - 1) + 4, 11)
+        self.terminal.sendCommand(Terminal.DOUBLE_HEIGHT_BOTTOM)
+        self.terminal.sendText("Mastodon for VT-100")
+
+        lines = self.__summonBox()
+        bounds = BoundingRectangle(top=(self.top - 1) + 5, bottom=(self.top - 1) + 16, left=21, right=59)
+        display(self.terminal, lines, bounds)
+
+        # Now, put the cursor in the right spot.
+        self.__moveCursor()
+
+    def processInput(self, inputVal: bytes) -> Optional[Action]:
+        if inputVal == Terminal.UP:
+            # Go to previous component.
+            if self.component > 0:
+                self.component -= 1
+
+                # We only need to redraw buttons if we left one behind.
+                if self.component != 0:
+                    self.__redrawButtons()
+                else:
+                    self.__moveCursor()
+
+            return NullAction()
+        elif inputVal == Terminal.DOWN:
+            # Go to next component.
+            if self.component < 3:
+                self.component += 1
+
+                # We only need to redraw buttons if we entered one.
+                if self.component >= 2:
+                    self.__redrawButtons()
+                else:
+                    self.__moveCursor()
+
+            return NullAction()
+        elif inputVal == b"\r":
+            # Ignore this.
+            return NullAction()
+        elif inputVal == b"\t":
+            # Client pressed tab.
+            if self.component == 0:
+                self.component += 1
+                self.__moveCursor()
+            elif self.component == 1:
+                self.component += 1
+                self.__redrawButtons()
+            elif self.component == 2:
+                self.component += 1
+                self.__redrawButtons()
+            elif self.component == 3:
+                self.component = 0
+                self.__redrawButtons()
+
+            return NullAction()
+        elif inputVal == b"\n":
+            # Client pressed enter.
+            if self.component == 0:
+                self.component += 1
+                self.__moveCursor()
+            elif self.component == 1:
+                self.component += 1
+                self.__redrawButtons()
+            elif self.component == 2:
+                # Actually attempt to log in.
+                if self.__login():
+                    self.renderer.status("Login successful, fetching timeline...")
+
+                    # Nuke our double height stuff.
+                    for row in range(self.top, self.bottom + 1):
+                        self.terminal.moveCursor(row, 1)
+                        self.terminal.sendCommand(Terminal.CLEAR_LINE)
+                    self.terminal.moveCursor(3, 1)
+                    self.terminal.sendCommand(Terminal.NORMAL_SIZE)
+                    self.terminal.moveCursor(4, 1)
+                    self.terminal.sendCommand(Terminal.NORMAL_SIZE)
+                    self.terminal.moveCursor(self.top, 1)
+
+                    return SwapScreenAction(spawnTimelineScreen)
+                else:
+                    self.renderer.status("Invalid username or password!")
+            elif self.component == 3:
+                # Client wants out.
+                return ExitAction()
+
+            return NullAction()
 
         return None
 
@@ -264,10 +468,25 @@ class Renderer:
         self.terminal = terminal
         self.client = client
 
-        # Also, hardcode the timeline renderer for now.
-        self.components: List[Component] = [
-            TimelineComponent(self.terminal, self.client, top=1, bottom=self.terminal.rows)
-        ]
+        # Start with no components.
+        self.components: List[Component] = []
+        self.status("")
+
+    @property
+    def rows(self) -> int:
+        return self.terminal.rows - 1
+
+    @property
+    def columns(self) -> int:
+        return self.terminal.columns
+
+    def status(self, text: str) -> None:
+        self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+        self.terminal.moveCursor(self.terminal.rows, 1)
+        self.terminal.sendCommand(Terminal.SET_NORMAL)
+        self.terminal.sendCommand(Terminal.SET_REVERSE)
+        self.terminal.sendText(pad(text, self.terminal.columns))
+        self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
 
     def processInput(self, inputVal: bytes) -> Optional[Action]:
         # First, try handling it with the registered components.
@@ -282,6 +501,18 @@ class Renderer:
 
         # Nothing to do
         return None
+
+
+def spawnLoginScreen(renderer: Renderer, *, server: str = "", username: str = "", password: str = "") -> None:
+    renderer.components = [
+        LoginComponent(renderer, top=1, bottom=renderer.rows, server=server, username=username, password=password)
+    ]
+
+
+def spawnTimelineScreen(renderer: Renderer) -> None:
+    renderer.components = [
+        TimelineComponent(renderer, top=1, bottom=renderer.rows)
+    ]
 
 
 def spawnTerminal(port: str, baudrate: int, flow: bool) -> Terminal:
@@ -304,7 +535,7 @@ def spawnTerminal(port: str, baudrate: int, flow: bool) -> Terminal:
     return terminal
 
 
-def main(server: str, port: str, baudrate: int, flow: bool) -> int:
+def main(server: str, username: str, password: str, port: str, baudrate: int, flow: bool) -> int:
     # First, attempt to talk to the server.
     client = Client(server)
 
@@ -313,6 +544,8 @@ def main(server: str, port: str, baudrate: int, flow: bool) -> int:
         # First, attempt to talk to the terminal, and get the current page rendering.
         terminal = spawnTerminal(port, baudrate, flow)
         renderer = Renderer(terminal, client)
+        if not renderer.components:
+            spawnLoginScreen(renderer, server=server, username=username, password=password)
 
         try:
             while not exiting:
@@ -329,6 +562,8 @@ def main(server: str, port: str, baudrate: int, flow: bool) -> int:
                     if isinstance(action, ExitAction):
                         print("Got request to end session!")
                         exiting = True
+                    elif isinstance(action, SwapScreenAction):
+                        action.swap(renderer)
 
         except TerminalException:
             # Terminal went away mid-transaction.
@@ -370,6 +605,22 @@ if __name__ == "__main__":
         type=str,
         help="Mastodon-compatible server to connect to",
     )
+    parser.add_argument(
+        "username",
+        metavar="USERNAME",
+        nargs="?",
+        type=str,
+        default="",
+        help="Username to pre-fill on the login screen",
+    )
+    parser.add_argument(
+        "password",
+        metavar="PASSWORD",
+        nargs="?",
+        type=str,
+        default="",
+        help="Password to pre-fill on the login screen",
+    )
     args = parser.parse_args()
 
-    sys.exit(main(args.server, args.port, args.baud, args.flow))
+    sys.exit(main(args.server, args.username, args.password, args.port, args.baud, args.flow))
