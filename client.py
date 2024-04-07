@@ -15,7 +15,9 @@ class BadLoginError(Exception):
 
 
 class Client:
-    SECRETS_LOC: str = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "secrets"))
+    SECRETS_LOC: str = os.path.abspath(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "secrets")
+    )
     CLIENT_NAME: str = "Mastodon for VT-100"
 
     def __init__(self, server: str) -> None:
@@ -36,9 +38,7 @@ class Client:
         # a one-time thing.
         if not os.path.isfile(creds_file):
             Mastodon.create_app(
-                self.CLIENT_NAME,
-                api_base_url=server,
-                to_file=creds_file
+                self.CLIENT_NAME, api_base_url=server, to_file=creds_file
             )
 
         # Now, save the client itself.
@@ -56,7 +56,7 @@ class Client:
 
     def fetchTimeline(self, which: Timeline) -> List[Dict[str, Any]]:
         if which == Timeline.HOME:
-            statuses = self.client.timeline(timeline='home')
+            statuses = self.client.timeline(timeline="home")
         else:
             raise Exception("Unknown timeline to fetch!")
 

@@ -5,13 +5,19 @@ from typing import List, Optional, Sequence, Tuple, TypeVar
 
 
 class ControlCodes:
-    def __init__(self, *, bold: bool = False, underline: bool = False, reverse: bool = False) -> None:
+    def __init__(
+        self, *, bold: bool = False, underline: bool = False, reverse: bool = False
+    ) -> None:
         self.bold = bold
         self.underline = underline
         self.reverse = reverse
 
     def codesFrom(self, prev: "ControlCodes") -> List[bytes]:
-        if ((not self.bold) and prev.bold) or ((not self.underline) and prev.underline) or ((not self.reverse) and prev.reverse):
+        if (
+            ((not self.bold) and prev.bold)
+            or ((not self.underline) and prev.underline)
+            or ((not self.reverse) and prev.reverse)
+        ):
             # If we're turning anything off, then we need to turn everything off and then re-enable
             # only what we care about.
             resetcodes: List[bytes] = [Terminal.SET_NORMAL]
@@ -41,7 +47,9 @@ class ControlCodes:
 TObj = TypeVar("TObj", bound=object)
 
 
-def wordwrap(text: str, meta: Sequence[TObj], width: int) -> List[Tuple[str, Sequence[TObj]]]:
+def wordwrap(
+    text: str, meta: Sequence[TObj], width: int
+) -> List[Tuple[str, Sequence[TObj]]]:
     """
     Given a text string and a maximum allowed width, word-wraps that text by
     returning a list of lines, none of which are longer than the specified
@@ -94,8 +102,8 @@ def wordwrap(text: str, meta: Sequence[TObj], width: int) -> List[Tuple[str, Seq
 
                 # Cut off the text and metadata up through the newline, so that
                 # the remaining bits are the next character+meta after.
-                text = text[(pos + 1):]
-                meta = meta[(pos + 1):]
+                text = text[(pos + 1) :]
+                meta = meta[(pos + 1) :]
 
                 # Filter out irrelevant wrap points and fix up their locations. We keep
                 # zero-location word-wrap points after this because text could include
@@ -242,10 +250,14 @@ def highlight(text: str) -> Tuple[str, List[ControlCodes]]:
             if part in {"<b>", "<bold>"}:
                 bdepth += 1
                 if bdepth == 1:
-                    cur = ControlCodes(bold=True, underline=cur.underline, reverse=cur.reverse)
+                    cur = ControlCodes(
+                        bold=True, underline=cur.underline, reverse=cur.reverse
+                    )
             elif part in {"</b>", "</bold>"}:
                 if bdepth == 1:
-                    cur = ControlCodes(bold=False, underline=cur.underline, reverse=cur.reverse)
+                    cur = ControlCodes(
+                        bold=False, underline=cur.underline, reverse=cur.reverse
+                    )
                 bdepth -= 1
                 if bdepth < 0:
                     bdepth = 0
@@ -253,10 +265,14 @@ def highlight(text: str) -> Tuple[str, List[ControlCodes]]:
             if part in {"<u>", "<underline>"}:
                 udepth += 1
                 if udepth == 1:
-                    cur = ControlCodes(bold=cur.bold, underline=True, reverse=cur.reverse)
+                    cur = ControlCodes(
+                        bold=cur.bold, underline=True, reverse=cur.reverse
+                    )
             elif part in {"</u>", "</underline>"}:
                 if udepth == 1:
-                    cur = ControlCodes(bold=cur.bold, underline=False, reverse=cur.reverse)
+                    cur = ControlCodes(
+                        bold=cur.bold, underline=False, reverse=cur.reverse
+                    )
                 udepth -= 1
                 if udepth < 0:
                     udepth = 0
@@ -264,10 +280,14 @@ def highlight(text: str) -> Tuple[str, List[ControlCodes]]:
             if part in {"<r>", "<reverse>"}:
                 rdepth += 1
                 if rdepth == 1:
-                    cur = ControlCodes(bold=cur.bold, underline=cur.underline, reverse=True)
+                    cur = ControlCodes(
+                        bold=cur.bold, underline=cur.underline, reverse=True
+                    )
             elif part in {"</r>", "</reverse>"}:
                 if rdepth == 1:
-                    cur = ControlCodes(bold=cur.bold, underline=cur.underline, reverse=False)
+                    cur = ControlCodes(
+                        bold=cur.bold, underline=cur.underline, reverse=False
+                    )
                 rdepth -= 1
                 if rdepth < 0:
                     rdepth = 0
@@ -303,7 +323,9 @@ class MastodonParser(HTMLParser):
 
         self.bdepth += 1
         if self.bdepth == 1:
-            return ControlCodes(bold=True, underline=code.underline, reverse=code.reverse)
+            return ControlCodes(
+                bold=True, underline=code.underline, reverse=code.reverse
+            )
         return code
 
     def __unbold_last_code(self) -> ControlCodes:
@@ -311,7 +333,9 @@ class MastodonParser(HTMLParser):
 
         if self.bdepth == 1:
             self.bdepth = 0
-            return ControlCodes(bold=False, underline=code.underline, reverse=code.reverse)
+            return ControlCodes(
+                bold=False, underline=code.underline, reverse=code.reverse
+            )
         elif self.bdepth > 0:
             self.bdepth -= 1
         return code
@@ -424,7 +448,11 @@ def html(data: str) -> Tuple[str, List[ControlCodes]]:
     return parser.parsed()
 
 
-def display(terminal: Terminal, lines: List[Tuple[str, List[ControlCodes]]], bounds: BoundingRectangle) -> None:
+def display(
+    terminal: Terminal,
+    lines: List[Tuple[str, List[ControlCodes]]],
+    bounds: BoundingRectangle,
+) -> None:
     # Before anything, verify that the bounds is within the terminal, and if not, skip displaying it. We're
     # 1-based since that's what the VT-100 manual refers to the top left as (1, 1).
     if bounds.bottom <= 1:
@@ -445,15 +473,21 @@ def display(terminal: Terminal, lines: List[Tuple[str, List[ControlCodes]]], bou
         lines = [(text[amount:], codes[amount:]) for (text, codes) in lines]
 
     # Now, clip the rectangle to the screen.
-    bounds = bounds.clip(BoundingRectangle(left=1, top=1, right=terminal.columns + 1, bottom=terminal.rows + 1))
+    bounds = bounds.clip(
+        BoundingRectangle(
+            left=1, top=1, right=terminal.columns + 1, bottom=terminal.rows + 1
+        )
+    )
     if bounds.width == 0 or bounds.height == 0:
         return
 
     # Clip off any lines that go off the bottom of the screen.
-    lines = lines[:bounds.height]
+    lines = lines[: bounds.height]
 
     # Now, figure out where we left off last time we drew anything.
-    last = ControlCodes(bold=terminal.bolded, underline=terminal.underlined, reverse=terminal.reversed)
+    last = ControlCodes(
+        bold=terminal.bolded, underline=terminal.underlined, reverse=terminal.reversed
+    )
 
     # Move to where we're drawing.
     row, col = terminal.fetchCursor()
@@ -477,8 +511,8 @@ def display(terminal: Terminal, lines: List[Tuple[str, List[ControlCodes]]], bou
                 terminal.moveCursor(row, col)
 
         # Now, make sure we don't trail off the right side of the terminal.
-        text = text[:bounds.width]
-        codes = codes[:bounds.width]
+        text = text[: bounds.width]
+        codes = codes[: bounds.width]
 
         # Finally, actually display the text.
         for pos in range(len(text)):
@@ -495,13 +529,23 @@ def display(terminal: Terminal, lines: List[Tuple[str, List[ControlCodes]]], bou
 
 if __name__ == "__main__":
     # I know there's a billion better ways to do this but IDGAF.
-    def verify(text: str, meta: Sequence[object], width: int, expectedText: List[str], expectedMeta: List[Sequence[object]]) -> None:
+    def verify(
+        text: str,
+        meta: Sequence[object],
+        width: int,
+        expectedText: List[str],
+        expectedMeta: List[Sequence[object]],
+    ) -> None:
         output = wordwrap(text, meta, width)
         actualText = [x[0] for x in output]
         actualMeta = [x[1] for x in output]
 
-        assert actualText == expectedText, f"Expected {expectedText} but got {actualText}"
-        assert actualMeta == expectedMeta, f"Expected {expectedMeta} but got {actualMeta}"
+        assert (
+            actualText == expectedText
+        ), f"Expected {expectedText} but got {actualText}"
+        assert (
+            actualMeta == expectedMeta
+        ), f"Expected {expectedMeta} but got {actualMeta}"
 
     # Empty.
     verify("", "", 15, [""], [""])
@@ -515,21 +559,51 @@ if __name__ == "__main__":
 
     # Wraps in expected spot.
     verify("123 4567 890", "abc defg hij", 10, ["123 4567", "890"], ["abc defg", "hij"])
-    verify("123 4567 890", "abc defg hij", 4, ["123", "4567", "890"], ["abc", "defg", "hij"])
+    verify(
+        "123 4567 890",
+        "abc defg hij",
+        4,
+        ["123", "4567", "890"],
+        ["abc", "defg", "hij"],
+    )
     verify("123-4567 890", "abc-defg hij", 10, ["123-4567", "890"], ["abc-defg", "hij"])
-    verify("123 4567-890", "abc defg-hij", 10, ["123 4567-", "890"], ["abc defg-", "hij"])
+    verify(
+        "123 4567-890", "abc defg-hij", 10, ["123 4567-", "890"], ["abc defg-", "hij"]
+    )
 
     # Handles multi-space elegantly.
-    verify("123  4567  890", "abc  defg  hij", 9, ["123  4567", "890"], ["abc  defg", "hij"])
-    verify("123  4567  890", "abc  defg  hij", 10, ["123  4567", "890"], ["abc  defg", "hij"])
+    verify(
+        "123  4567  890",
+        "abc  defg  hij",
+        9,
+        ["123  4567", "890"],
+        ["abc  defg", "hij"],
+    )
+    verify(
+        "123  4567  890",
+        "abc  defg  hij",
+        10,
+        ["123  4567", "890"],
+        ["abc  defg", "hij"],
+    )
 
     # Handles newlines and wraps together.
-    verify("123 4567\n890", "abc defg hij", 10, ["123 4567", "890"], ["abc defg", "hij"])
-    verify("123\n4567 890", "abc defg hij", 10, ["123", "4567 890"], ["abc", "defg hij"])
+    verify(
+        "123 4567\n890", "abc defg hij", 10, ["123 4567", "890"], ["abc defg", "hij"]
+    )
+    verify(
+        "123\n4567 890", "abc defg hij", 10, ["123", "4567 890"], ["abc", "defg hij"]
+    )
 
     # Handles unfortunate word-wrap issues.
     verify("abcdefg", "1234567", 5, ["abcde", "fg"], ["12345", "67"])
-    verify("abcdefg hij kl", "1234567 123 45", 6, ["abcdef", "g hij", "kl"], ["123456", "7 123", "45"])
+    verify(
+        "abcdefg hij kl",
+        "1234567 123 45",
+        6,
+        ["abcdef", "g hij", "kl"],
+        ["123456", "7 123", "45"],
+    )
 
     # Hey we did it!
     print("Passed")

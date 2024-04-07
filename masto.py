@@ -72,20 +72,25 @@ def boxbottom(width: int) -> Tuple[str, List[ControlCodes]]:
     )
 
 
-def boxmiddle(line: Tuple[str, Sequence[ControlCodes]], width: int) -> Tuple[str, List[ControlCodes]]:
-    text = line[0][:(width - 2)]
-    codes = line[1][:(width - 2)]
+def boxmiddle(
+    line: Tuple[str, Sequence[ControlCodes]], width: int
+) -> Tuple[str, List[ControlCodes]]:
+    text = line[0][: (width - 2)]
+    codes = line[1][: (width - 2)]
     if len(text) < width - 2:
         amount = (width - 2) - len(text)
 
         text = text + (" " * amount)
-        codes = [*codes, *([ControlCodes(bold=False, underline=False, reverse=False)] * amount)]
+        codes = [
+            *codes,
+            *([ControlCodes(bold=False, underline=False, reverse=False)] * amount),
+        ]
 
     text = "\u2502" + text + "\u2502"
     codes = [
         ControlCodes(bold=False, underline=False, reverse=False),
         *codes,
-        ControlCodes(bold=False, underline=False, reverse=False)
+        ControlCodes(bold=False, underline=False, reverse=False),
     ]
     return (text, codes)
 
@@ -101,7 +106,9 @@ def obfuscate(line: str) -> str:
     return "*" * len(line)
 
 
-def join(chunks: List[Tuple[str, Sequence[ControlCodes]]]) -> Tuple[str, List[ControlCodes]]:
+def join(
+    chunks: List[Tuple[str, Sequence[ControlCodes]]]
+) -> Tuple[str, List[ControlCodes]]:
     accum: Tuple[str, List[ControlCodes]] = ("", [])
     for chunk in chunks:
         accum = (accum[0] + chunk[0], [*accum[1], *chunk[1]])
@@ -113,19 +120,21 @@ class TimelinePost:
         self.renderer = renderer
         self.data = data
 
-        reblog = self.data['reblog']
+        reblog = self.data["reblog"]
         if reblog:
             # First, start with the name of the reblogger.
-            account = striplow(self.data['account']['display_name'])
-            username = striplow(self.data['account']['acct'])
-            boostline = highlight(f"{sanitize(account)} (@{sanitize(username)}) boosted")
+            account = striplow(self.data["account"]["display_name"])
+            username = striplow(self.data["account"]["acct"])
+            boostline = highlight(
+                f"{sanitize(account)} (@{sanitize(username)}) boosted"
+            )
 
             # Now, grab the original name.
-            account = striplow(reblog['account']['display_name'])
-            username = striplow(reblog['account']['acct'])
+            account = striplow(reblog["account"]["display_name"])
+            username = striplow(reblog["account"]["acct"])
             nameline = highlight(f"<b>{sanitize(account)}</b> @{sanitize(username)}")
 
-            content = striplow(reblog['content'])
+            content = striplow(reblog["content"])
             content, codes = html(content)
             postbody = wordwrap(content, codes, renderer.columns - 2)
 
@@ -134,7 +143,7 @@ class TimelinePost:
                 boostline,
                 nameline,
                 *postbody,
-                *self.__format_attachments(reblog['media_attachments']),
+                *self.__format_attachments(reblog["media_attachments"]),
             ]
 
             # Now, surround the post in a box.
@@ -145,11 +154,11 @@ class TimelinePost:
             ]
         else:
             # First, start with the name of the account.
-            account = striplow(self.data['account']['display_name'])
-            username = striplow(self.data['account']['acct'])
+            account = striplow(self.data["account"]["display_name"])
+            username = striplow(self.data["account"]["acct"])
             nameline = highlight(f"<b>{sanitize(account)}</b> @{sanitize(username)}")
 
-            content = striplow(self.data['content'])
+            content = striplow(self.data["content"])
             content, codes = html(content)
             postbody = wordwrap(content, codes, renderer.columns - 2)
 
@@ -157,7 +166,7 @@ class TimelinePost:
             textlines = [
                 nameline,
                 *postbody,
-                *self.__format_attachments(self.data['media_attachments']),
+                *self.__format_attachments(self.data["media_attachments"]),
             ]
 
             # Now, surround the post in a box.
@@ -167,17 +176,24 @@ class TimelinePost:
                 boxbottom(renderer.columns),
             ]
 
-    def __format_attachments(self, attachments: List[Dict[str, Any]]) -> List[Tuple[str, List[ControlCodes]]]:
+    def __format_attachments(
+        self, attachments: List[Dict[str, Any]]
+    ) -> List[Tuple[str, List[ControlCodes]]]:
         attachmentLines = []
         for attachment in attachments:
-            alt = striplow(attachment['description'] or 'no description', allow_safe=True)
-            url = (attachment['url'] or '').split("/")[-1]
+            alt = striplow(
+                attachment["description"] or "no description", allow_safe=True
+            )
+            url = (attachment["url"] or "").split("/")[-1]
             description, codes = highlight(f"<u>{url}</u>: {alt}")
 
             attachmentbody = wordwrap(description, codes, self.renderer.columns - 4)
             attachmentLines += [
                 boxtop(self.renderer.columns - 2),
-                *[boxmiddle(line, self.renderer.columns - 2) for line in attachmentbody],
+                *[
+                    boxmiddle(line, self.renderer.columns - 2)
+                    for line in attachmentbody
+                ],
                 boxbottom(self.renderer.columns - 2),
             ]
 
@@ -188,7 +204,9 @@ class TimelinePost:
         return len(self.lines)
 
     def draw(self, top: int, bottom: int, offset: int) -> None:
-        bounds = BoundingRectangle(top=top, bottom=bottom + 1, left=1, right=self.renderer.columns + 1)
+        bounds = BoundingRectangle(
+            top=top, bottom=bottom + 1, left=1, right=self.renderer.columns + 1
+        )
         display(self.renderer.terminal, self.lines[offset:], bounds)
 
 
@@ -291,7 +309,9 @@ class TimelineComponent(Component):
 
 
 class OneLineInputBox:
-    def __init__(self, renderer: "Renderer", text: str, length: int, *, obfuscate: bool = False) -> None:
+    def __init__(
+        self, renderer: "Renderer", text: str, length: int, *, obfuscate: bool = False
+    ) -> None:
         self.renderer = renderer
         self.text = text[:length]
         self.cursor = len(self.text)
@@ -301,16 +321,14 @@ class OneLineInputBox:
     @property
     def lines(self) -> List[Tuple[str, List[ControlCodes]]]:
         if self.obfuscate:
-            return [
-                highlight("<r>" + pad(obfuscate(self.text), 36) + "</r>")
-            ]
+            return [highlight("<r>" + pad(obfuscate(self.text), 36) + "</r>")]
         else:
-            return [
-                highlight("<r>" + pad(self.text, 36) + "</r>")
-            ]
+            return [highlight("<r>" + pad(self.text, 36) + "</r>")]
 
     def draw(self, row: int, column: int) -> None:
-        bounds = BoundingRectangle(top=row, bottom=row + 1, left=column, right=column + self.length + 1)
+        bounds = BoundingRectangle(
+            top=row, bottom=row + 1, left=column, right=column + self.length + 1
+        )
         display(self.renderer.terminal, self.lines, bounds)
         self.renderer.terminal.moveCursor(row, column + self.cursor)
 
@@ -376,7 +394,16 @@ class OneLineInputBox:
 
 
 class LoginComponent(Component):
-    def __init__(self, renderer: "Renderer", top: int, bottom: int, *, server: str = "", username: str = "", password: str = "") -> None:
+    def __init__(
+        self,
+        renderer: "Renderer",
+        top: int,
+        bottom: int,
+        *,
+        server: str = "",
+        username: str = "",
+        password: str = "",
+    ) -> None:
         super().__init__(renderer, top, bottom)
 
         # Set up for what input we're handling.
@@ -434,7 +461,10 @@ class LoginComponent(Component):
             boxmiddle(highlight("Password:"), 38),
             boxmiddle(self.password.lines[0], 38),
             boxmiddle(highlight(""), 38),
-            *[boxmiddle(join([login[x], middle, quit[x]]), 38) for x in range(len(login))],
+            *[
+                boxmiddle(join([login[x], middle, quit[x]]), 38)
+                for x in range(len(login))
+            ],
             boxbottom(38),
         ]
 
@@ -443,7 +473,9 @@ class LoginComponent(Component):
     def __redrawButtons(self) -> None:
         lines = self.__summonBox()
         lines = lines[8:9]
-        bounds = BoundingRectangle(top=(self.top - 1) + 13, bottom=(self.top - 1) + 14, left=21, right=59)
+        bounds = BoundingRectangle(
+            top=(self.top - 1) + 13, bottom=(self.top - 1) + 14, left=21, right=59
+        )
         display(self.terminal, lines, bounds)
 
         # Now, put the cursor back.
@@ -462,7 +494,9 @@ class LoginComponent(Component):
         self.terminal.sendText("Mastodon for VT-100")
 
         lines = self.__summonBox()
-        bounds = BoundingRectangle(top=(self.top - 1) + 5, bottom=(self.top - 1) + 16, left=21, right=59)
+        bounds = BoundingRectangle(
+            top=(self.top - 1) + 5, bottom=(self.top - 1) + 16, left=21, right=59
+        )
         display(self.terminal, lines, bounds)
 
         # Now, put the cursor in the right spot.
@@ -476,7 +510,9 @@ class LoginComponent(Component):
 
                 # Redraw prompt, in case they typed a bad username and password.
                 if self.component == 1:
-                    self.renderer.status(f"Please enter your credentials for {self.server}.")
+                    self.renderer.status(
+                        f"Please enter your credentials for {self.server}."
+                    )
 
                 # We only need to redraw buttons if we left one behind.
                 if self.component != 0:
@@ -516,7 +552,9 @@ class LoginComponent(Component):
                 self.__redrawButtons()
 
                 # Redraw prompt, in case they typed a bad username and password.
-                self.renderer.status(f"Please enter your credentials for {self.server}.")
+                self.renderer.status(
+                    f"Please enter your credentials for {self.server}."
+                )
 
             return NullAction()
         elif inputVal == b"\n":
@@ -604,16 +642,23 @@ class Renderer:
         return None
 
 
-def spawnLoginScreen(renderer: Renderer, *, server: str = "", username: str = "", password: str = "") -> None:
+def spawnLoginScreen(
+    renderer: Renderer, *, server: str = "", username: str = "", password: str = ""
+) -> None:
     renderer.components = [
-        LoginComponent(renderer, top=1, bottom=renderer.rows, server=server, username=username, password=password)
+        LoginComponent(
+            renderer,
+            top=1,
+            bottom=renderer.rows,
+            server=server,
+            username=username,
+            password=password,
+        )
     ]
 
 
 def spawnTimelineScreen(renderer: Renderer) -> None:
-    renderer.components = [
-        TimelineComponent(renderer, top=1, bottom=renderer.rows)
-    ]
+    renderer.components = [TimelineComponent(renderer, top=1, bottom=renderer.rows)]
 
 
 def spawnTerminal(port: str, baudrate: int, flow: bool) -> Terminal:
@@ -636,7 +681,9 @@ def spawnTerminal(port: str, baudrate: int, flow: bool) -> Terminal:
     return terminal
 
 
-def main(server: str, username: str, password: str, port: str, baudrate: int, flow: bool) -> int:
+def main(
+    server: str, username: str, password: str, port: str, baudrate: int, flow: bool
+) -> int:
     # First, attempt to talk to the server.
     client = Client(server)
 
@@ -646,7 +693,9 @@ def main(server: str, username: str, password: str, port: str, baudrate: int, fl
         terminal = spawnTerminal(port, baudrate, flow)
         renderer = Renderer(terminal, client)
         if not renderer.components:
-            spawnLoginScreen(renderer, server=server, username=username, password=password)
+            spawnLoginScreen(
+                renderer, server=server, username=username, password=password
+            )
 
         try:
             while not exiting:
@@ -724,4 +773,6 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    sys.exit(main(args.server, args.username, args.password, args.port, args.baud, args.flow))
+    sys.exit(
+        main(args.server, args.username, args.password, args.port, args.baud, args.flow)
+    )
