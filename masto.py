@@ -1,4 +1,5 @@
 import argparse
+import emoji
 import sys
 import time
 
@@ -130,18 +131,18 @@ class TimelinePost:
         reblog = self.data["reblog"]
         if reblog:
             # First, start with the name of the reblogger.
-            account = striplow(self.data["account"]["display_name"])
-            username = striplow(self.data["account"]["acct"])
+            account = emoji.demojize(striplow(self.data["account"]["display_name"]))
+            username = emoji.demojize(striplow(self.data["account"]["acct"]))
             boostline = highlight(
                 f"{sanitize(account)} (@{sanitize(username)}) boosted"
             )
 
             # Now, grab the original name.
-            account = striplow(reblog["account"]["display_name"])
-            username = striplow(reblog["account"]["acct"])
+            account = emoji.demojize(striplow(reblog["account"]["display_name"]))
+            username = emoji.demojize(striplow(reblog["account"]["acct"]))
             nameline = highlight(f"<b>{sanitize(account)}</b> @{sanitize(username)}")
 
-            content = striplow(reblog["content"])
+            content = emoji.demojize(striplow(reblog["content"]))
             content, codes = html(content)
             postbody = wordwrap(content, codes, renderer.columns - 2)
 
@@ -161,11 +162,11 @@ class TimelinePost:
             ]
         else:
             # First, start with the name of the account.
-            account = striplow(self.data["account"]["display_name"])
-            username = striplow(self.data["account"]["acct"])
+            account = emoji.demojize(striplow(self.data["account"]["display_name"]))
+            username = emoji.demojize(striplow(self.data["account"]["acct"]))
             nameline = highlight(f"<b>{sanitize(account)}</b> @{sanitize(username)}")
 
-            content = striplow(self.data["content"])
+            content = emoji.demojize(striplow(self.data["content"]))
             content, codes = html(content)
             postbody = wordwrap(content, codes, renderer.columns - 2)
 
@@ -189,7 +190,7 @@ class TimelinePost:
         attachmentLines = []
         for attachment in attachments:
             alt = striplow(
-                attachment["description"] or "no description", allow_safe=True
+                emoji.demojize(attachment["description"] or "no description"), allow_safe=True
             )
             url = (attachment["url"] or "").split("/")[-1]
             description, codes = highlight(f"<u>{url}</u>: {alt}")
