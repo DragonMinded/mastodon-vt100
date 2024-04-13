@@ -23,8 +23,9 @@ class ExitAction(Action):
 
 
 class SwapScreenAction(Action):
-    def __init__(self, swap: Callable[["Renderer"], None]) -> None:
+    def __init__(self, swap: Callable[["Renderer"], None], **params: Dict[str, Any]) -> None:
         self.swap = swap
+        self.params = params or {}
 
 
 class Component:
@@ -35,6 +36,10 @@ class Component:
         self.top = top
         self.bottom = bottom
         self.rows = (bottom - top) + 1
+
+    @property
+    def properties(self) -> Dict[str, Any]:
+        return self.renderer.properties
 
     def scrollUp(self) -> None:
         pass
@@ -211,12 +216,15 @@ class TimelinePost:
 
 
 class TimelineComponent(Component):
-    def __init__(self, renderer: "Renderer", top: int, bottom: int) -> None:
+    def __init__(self, renderer: "Renderer", top: int, bottom: int, *, timeline: Timeline = Timeline.HOME) -> None:
         super().__init__(renderer, top, bottom)
+
+        # Save params we care about.
+        self.timeline = timeline
 
         # First, fetch the timeline.
         self.offset = 0
-        self.statuses = self.client.fetchTimeline(Timeline.HOME)
+        self.statuses = self.client.fetchTimeline(self.timeline)
         self.renderer.status("Timeline fetched, drawing...")
 
         # Now, format each post into it's own component.
@@ -369,6 +377,11 @@ class TimelineComponent(Component):
 
             handled = True
 
+        elif inputVal == b"q":
+            # Log back out.
+            self.renderer.status("Logged out.")
+            return SwapScreenAction(spawnLoginScreen, server=self.properties['server'], username=self.properties['username'])
+
         elif inputVal == b"t":
             # Move to top of page.
             if self.offset < (self.bottom - self.top) + 1:
@@ -398,7 +411,7 @@ class TimelineComponent(Component):
             self.renderer.status("Refetching timeline...")
 
             self.offset = 0
-            self.statuses = self.client.fetchTimeline(Timeline.HOME)
+            self.statuses = self.client.fetchTimeline(self.timeline)
             self.renderer.status("Timeline fetched, drawing...")
 
             # Now, format each post into it's own component.
@@ -498,7 +511,7 @@ class TimelineComponent(Component):
         if infiniteScrollFetch:
             self.renderer.status("Fetching more posts...")
 
-            newStatuses = self.client.fetchTimeline(Timeline.HOME, since=self.statuses[-1])
+            newStatuses = self.client.fetchTimeline(self.timeline, since=self.statuses[-1])
 
             self.renderer.status("Additional posts fetched, drawing...")
 
@@ -619,7 +632,7 @@ class LoginComponent(Component):
         super().__init__(renderer, top, bottom)
 
         # Set up for what input we're handling.
-        self.server = server
+        self.properties['server'] = server
         self.username = OneLineInputBox(renderer, username, 36)
         self.password = OneLineInputBox(renderer, password, 36, obfuscate=True)
 
@@ -628,7 +641,7 @@ class LoginComponent(Component):
 
         # Now, draw the components.
         self.draw()
-        self.renderer.status(f"Please enter your credentials for {self.server}.")
+        self.renderer.status(f"Please enter your credentials for {self.properties['server']}.")
 
     def __login(self) -> bool:
         # Attempt to log in.
@@ -723,7 +736,7 @@ class LoginComponent(Component):
                 # Redraw prompt, in case they typed a bad username and password.
                 if self.component == 1:
                     self.renderer.status(
-                        f"Please enter your credentials for {self.server}."
+                        f"Please enter your credentials for {self.properties['server']}."
                     )
 
                 # We only need to redraw buttons if we left one behind.
@@ -765,7 +778,7 @@ class LoginComponent(Component):
 
                 # Redraw prompt, in case they typed a bad username and password.
                 self.renderer.status(
-                    f"Please enter your credentials for {self.server}."
+                    f"Please enter your credentials for {self.properties['server']}."
                 )
 
             return NullAction()
@@ -780,6 +793,9 @@ class LoginComponent(Component):
             elif self.component == 2:
                 # Actually attempt to log in.
                 if self.__login():
+                    # Preserve the username so all scenes can access it.
+                    self.properties['username'] = self.username.text
+
                     self.renderer.status("Login successful, fetching timeline...")
 
                     # Nuke our double height stuff.
@@ -885,8 +901,12 @@ class ErrorComponent(Component):
 
 class Renderer:
     def __init__(self, terminal: Terminal, client: Client) -> None:
+        # Our managed objects.
         self.terminal = terminal
         self.client = client
+
+        # Our global properties.
+        self.properties: Dict[str, Any] = {}
 
         # Start with no components.
         self.components: List[Component] = []
@@ -958,8 +978,8 @@ def spawnErrorScreen(
     ]
 
 
-def spawnTimelineScreen(renderer: Renderer) -> None:
-    renderer.components = [TimelineComponent(renderer, top=1, bottom=renderer.rows)]
+def spawnTimelineScreen(renderer: Renderer, *, timeline: Timeline=Timeline.HOME) -> None:
+    renderer.components = [TimelineComponent(renderer, top=1, bottom=renderer.rows, timeline=timeline)]
 
 
 def spawnTerminal(port: str, baudrate: int, flow: bool) -> Terminal:
@@ -1020,7 +1040,7 @@ def main(
                         print("Got request to end session!")
                         exiting = True
                     elif isinstance(action, SwapScreenAction):
-                        action.swap(renderer)
+                        action.swap(renderer, **action.params)
 
         except TerminalException:
             # Terminal went away mid-transaction.
