@@ -23,7 +23,9 @@ class ExitAction(Action):
 
 
 class SwapScreenAction(Action):
-    def __init__(self, swap: Callable[["Renderer"], None], **params: Dict[str, Any]) -> None:
+    def __init__(
+        self, swap: Callable[["Renderer"], None], **params: Dict[str, Any]
+    ) -> None:
         self.swap = swap
         self.params = params or {}
 
@@ -216,7 +218,14 @@ class TimelinePost:
 
 
 class TimelineComponent(Component):
-    def __init__(self, renderer: "Renderer", top: int, bottom: int, *, timeline: Timeline = Timeline.HOME) -> None:
+    def __init__(
+        self,
+        renderer: "Renderer",
+        top: int,
+        bottom: int,
+        *,
+        timeline: Timeline = Timeline.HOME,
+    ) -> None:
         super().__init__(renderer, top, bottom)
 
         # Save params we care about.
@@ -380,7 +389,11 @@ class TimelineComponent(Component):
         elif inputVal == b"q":
             # Log back out.
             self.renderer.status("Logged out.")
-            return SwapScreenAction(spawnLoginScreen, server=self.properties['server'], username=self.properties['username'])
+            return SwapScreenAction(
+                spawnLoginScreen,
+                server=self.properties["server"],
+                username=self.properties["username"],
+            )
 
         elif inputVal == b"t":
             # Move to top of page.
@@ -415,7 +428,9 @@ class TimelineComponent(Component):
             self.renderer.status("Timeline fetched, drawing...")
 
             # Now, format each post into it's own component.
-            self.posts = [TimelinePost(self.renderer, status) for status in self.statuses]
+            self.posts = [
+                TimelinePost(self.renderer, status) for status in self.statuses
+            ]
 
             # Now, draw them.
             self.draw()
@@ -511,7 +526,9 @@ class TimelineComponent(Component):
         if infiniteScrollFetch:
             self.renderer.status("Fetching more posts...")
 
-            newStatuses = self.client.fetchTimeline(self.timeline, since=self.statuses[-1])
+            newStatuses = self.client.fetchTimeline(
+                self.timeline, since=self.statuses[-1]
+            )
 
             self.renderer.status("Additional posts fetched, drawing...")
 
@@ -632,7 +649,7 @@ class LoginComponent(Component):
         super().__init__(renderer, top, bottom)
 
         # Set up for what input we're handling.
-        self.properties['server'] = server
+        self.properties["server"] = server
         self.username = OneLineInputBox(renderer, username, 36)
         self.password = OneLineInputBox(renderer, password, 36, obfuscate=True)
 
@@ -641,7 +658,9 @@ class LoginComponent(Component):
 
         # Now, draw the components.
         self.draw()
-        self.renderer.status(f"Please enter your credentials for {self.properties['server']}.")
+        self.renderer.status(
+            f"Please enter your credentials for {self.properties['server']}."
+        )
 
     def __login(self) -> bool:
         # Attempt to log in.
@@ -794,7 +813,7 @@ class LoginComponent(Component):
                 # Actually attempt to log in.
                 if self.__login():
                     # Preserve the username so all scenes can access it.
-                    self.properties['username'] = self.username.text
+                    self.properties["username"] = self.username.text
 
                     self.renderer.status("Login successful, fetching timeline...")
 
@@ -978,8 +997,12 @@ def spawnErrorScreen(
     ]
 
 
-def spawnTimelineScreen(renderer: Renderer, *, timeline: Timeline=Timeline.HOME) -> None:
-    renderer.components = [TimelineComponent(renderer, top=1, bottom=renderer.rows, timeline=timeline)]
+def spawnTimelineScreen(
+    renderer: Renderer, *, timeline: Timeline = Timeline.HOME
+) -> None:
+    renderer.components = [
+        TimelineComponent(renderer, top=1, bottom=renderer.rows, timeline=timeline)
+    ]
 
 
 def spawnTerminal(port: str, baudrate: int, flow: bool) -> Terminal:

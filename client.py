@@ -69,7 +69,9 @@ class Client:
         except MastodonIllegalArgumentError:
             raise BadLoginError("Bad username or password!")
 
-    def fetchTimeline(self, which: Timeline, *, since: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    def fetchTimeline(
+        self, which: Timeline, *, since: Optional[Dict[str, Any]] = None
+    ) -> List[Dict[str, Any]]:
         self.__assert_valid()
 
         if which == Timeline.HOME:
