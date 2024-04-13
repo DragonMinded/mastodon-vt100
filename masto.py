@@ -247,6 +247,14 @@ class TimelineComponent(Component):
             post.draw(top, bottom, 0)
             pos += post.height
 
+        pos += self.top
+        while pos <= self.bottom:
+            self.renderer.terminal.moveCursor(pos, 1)
+            self.renderer.terminal.sendCommand(Terminal.CLEAR_LINE)
+            pos += 1
+
+        self.renderer.terminal.moveCursor(self.bottom, self.renderer.terminal.columns)
+
     def _drawOneLine(self, line: int) -> None:
         pos = -self.offset
         viewHeight = (self.bottom - self.top) + 1
@@ -289,6 +297,7 @@ class TimelineComponent(Component):
                 self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
 
             return NullAction()
+
         elif inputVal == Terminal.DOWN:
             # Scroll down one line.
             if self.offset < 0xFFFFFFFF:
@@ -302,6 +311,47 @@ class TimelineComponent(Component):
                 self._drawOneLine(self.bottom)
                 self.terminal.clearScrollRegion()
                 self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
+
+            return NullAction()
+
+        elif inputVal == b"t":
+            # Move to top of page.
+            if self.offset < (self.bottom - self.top) + 1:
+                # We can scroll to save render time.
+                drawAmount = self.offset
+                self.offset = 0
+
+                self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+                self.terminal.sendCommand(Terminal.SET_NORMAL)
+                self.terminal.setScrollRegion(self.top, self.bottom)
+                self.terminal.moveCursor(self.top, 1)
+                for _ in range(drawAmount):
+                    self.terminal.sendCommand(Terminal.MOVE_CURSOR_UP)
+                for line in range(drawAmount):
+                    self._drawOneLine(self.top + line)
+                self.terminal.clearScrollRegion()
+                self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
+            else:
+                # We must redraw the whole screen.
+                self.offset = 0
+                self.draw()
+
+            return NullAction()
+
+        elif inputVal == b"r":
+            # Refresh timeline action.
+            self.renderer.status("Refetching timeline...")
+
+            self.offset = 0
+            self.statuses = self.client.fetchTimeline(Timeline.HOME)
+            self.renderer.status("Timeline fetched, drawing...")
+
+            # Now, format each post into it's own component.
+            self.posts = [TimelinePost(self.renderer, status) for status in self.statuses]
+
+            # Now, draw them.
+            self.draw()
+            self.renderer.status("")
 
             return NullAction()
 
@@ -337,10 +387,14 @@ class OneLineInputBox:
             if self.cursor > 0:
                 self.cursor -= 1
                 self.renderer.terminal.moveCursor(row, column + self.cursor)
+
+            return NullAction()
         elif inputVal == Terminal.RIGHT:
             if self.cursor < len(self.text):
                 self.cursor += 1
                 self.renderer.terminal.moveCursor(row, column + self.cursor)
+
+            return NullAction()
         elif inputVal in {Terminal.BACKSPACE, Terminal.DELETE}:
             if self.text:
                 # Just subtract from input.
