@@ -226,7 +226,7 @@ class TimelineComponent(Component):
         self.draw()
         self.renderer.status("")
 
-    def draw(self) -> None:
+    def draw(self) -> Optional[Tuple[int, int]]:
         pos = -self.offset
         viewHeight = (self.bottom - self.top) + 1
 
@@ -248,14 +248,22 @@ class TimelineComponent(Component):
             pos += post.height
 
         pos += self.top
+        topMissed = pos
+        amountMissed = 0
         while pos <= self.bottom:
             self.renderer.terminal.moveCursor(pos, 1)
             self.renderer.terminal.sendCommand(Terminal.CLEAR_LINE)
             pos += 1
+            amountMissed += 1
 
         self.renderer.terminal.moveCursor(self.bottom, self.renderer.terminal.columns)
 
-    def _drawOneLine(self, line: int) -> None:
+        if amountMissed > 0:
+            return (topMissed, topMissed + (amountMissed - 1))
+        else:
+            return None
+
+    def _drawOneLine(self, line: int) -> bool:
         pos = -self.offset
         viewHeight = (self.bottom - self.top) + 1
 
@@ -279,7 +287,11 @@ class TimelineComponent(Component):
                 continue
 
             post.draw(line, line, offset)
-            pos += post.height
+            return True
+
+        self.renderer.terminal.moveCursor(line, 1)
+        self.renderer.terminal.sendCommand(Terminal.CLEAR_LINE)
+        return False
 
     def _getPostForLine(self, line: int) -> float:
         pos = -self.offset
@@ -317,6 +329,10 @@ class TimelineComponent(Component):
         return None
 
     def processInput(self, inputVal: bytes) -> Optional[Action]:
+        infiniteScrollFetch = False
+        infiniteScrollRedraw: List[int] = []
+        handled = False
+
         if inputVal == Terminal.UP:
             # Scroll up one line.
             if self.offset > 0:
@@ -331,7 +347,7 @@ class TimelineComponent(Component):
                 self.terminal.clearScrollRegion()
                 self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
 
-            return NullAction()
+            handled = True
 
         elif inputVal == Terminal.DOWN:
             # Scroll down one line.
@@ -343,11 +359,15 @@ class TimelineComponent(Component):
                 self.terminal.setScrollRegion(self.top, self.bottom)
                 self.terminal.moveCursor(self.bottom, 1)
                 self.terminal.sendCommand(Terminal.MOVE_CURSOR_DOWN)
-                self._drawOneLine(self.bottom)
+                if not self._drawOneLine(self.bottom):
+                    # The line draw didn't do anything, so we need to fetch more
+                    # data after we finish drawing.
+                    infiniteScrollFetch = True
+                    infiniteScrollRedraw.append(self.bottom)
                 self.terminal.clearScrollRegion()
                 self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
 
-            return NullAction()
+            handled = True
 
         elif inputVal == b"t":
             # Move to top of page.
@@ -371,7 +391,7 @@ class TimelineComponent(Component):
                 self.offset = 0
                 self.draw()
 
-            return NullAction()
+            handled = True
 
         elif inputVal == b"r":
             # Refresh timeline action.
@@ -398,7 +418,7 @@ class TimelineComponent(Component):
                 # We're on the top line of the current post, grab the previous.
                 whichPost -= 1
             if whichPost < 0:
-                whichPost = 0;
+                whichPost = 0
 
             # Figure out how much we have to move to get there.
             newOffset = self._getLineForPost(whichPost)
@@ -426,7 +446,7 @@ class TimelineComponent(Component):
                     # We must redraw the whole screen.
                     self.draw()
 
-            return NullAction()
+            handled = True
 
         elif inputVal == b"n":
             # Move to next post.
@@ -452,16 +472,48 @@ class TimelineComponent(Component):
                     for _ in range(moveAmount):
                         self.terminal.sendCommand(Terminal.MOVE_CURSOR_DOWN)
                     for line in range(moveAmount):
-                        self._drawOneLine((self.bottom - (moveAmount - 1)) + line)
+                        actualLine = (self.bottom - (moveAmount - 1)) + line
+                        if not self._drawOneLine(actualLine):
+                            # The line draw didn't do anything, so we need to fetch more
+                            # data after we finish drawing.
+                            infiniteScrollFetch = True
+                            infiniteScrollRedraw.append(actualLine)
                     self.terminal.clearScrollRegion()
                     self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
                 else:
                     # We must redraw the whole screen.
-                    self.draw()
+                    possibleLineList = self.draw()
+                    if possibleLineList is not None:
+                        start, end = possibleLineList
+                        for line in range(start, end + 1):
+                            infiniteScrollRedraw.append(line)
+                        infiniteScrollFetch = True
 
-            return NullAction()
+            handled = True
 
-        return None
+        if not handled:
+            return None
+
+        # Figure out if we should load the next bit of timeline.
+        if infiniteScrollFetch:
+            self.renderer.status("Fetching more posts...")
+
+            newStatuses = self.client.fetchTimeline(Timeline.HOME, since=self.statuses[-1])
+
+            self.renderer.status("Additional posts fetched, drawing...")
+
+            # Now, format each post into it's own component.
+            newPosts = [TimelinePost(self.renderer, status) for status in newStatuses]
+
+            self.statuses += newStatuses
+            self.posts += newPosts
+
+            # Now, draw them.
+            for line in infiniteScrollRedraw:
+                self._drawOneLine(line)
+            self.renderer.status("")
+
+        return NullAction()
 
 
 class OneLineInputBox:

@@ -3,7 +3,7 @@ from enum import Enum, auto
 from mastodon import Mastodon  # type: ignore
 from mastodon.errors import MastodonNetworkError, MastodonIllegalArgumentError  # type: ignore
 from urllib.parse import urlparse
-from typing import Any, Dict, List, cast
+from typing import Any, Dict, List, Optional, cast
 
 
 class Timeline(Enum):
@@ -69,11 +69,11 @@ class Client:
         except MastodonIllegalArgumentError:
             raise BadLoginError("Bad username or password!")
 
-    def fetchTimeline(self, which: Timeline) -> List[Dict[str, Any]]:
+    def fetchTimeline(self, which: Timeline, *, since: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         self.__assert_valid()
 
         if which == Timeline.HOME:
-            statuses = self.__client.timeline(timeline="home")
+            statuses = self.__client.timeline(timeline="home", max_id=since)
         else:
             raise Exception("Unknown timeline to fetch!")
 
