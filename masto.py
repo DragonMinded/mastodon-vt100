@@ -281,6 +281,41 @@ class TimelineComponent(Component):
             post.draw(line, line, offset)
             pos += post.height
 
+    def _getPostForLine(self, line: int) -> float:
+        pos = -self.offset
+        viewHeight = (self.bottom - self.top) + 1
+
+        for cnt, post in enumerate(self.posts):
+            if pos >= viewHeight:
+                # Too low below the viewport.
+                break
+            if pos + post.height <= 0:
+                # Too high above the viewport.
+                pos += post.height
+                continue
+
+            top = pos + self.top
+            bottom = top + post.height
+
+            if line >= top and line <= bottom:
+                start = line - top
+                return float(cnt) + (start / (bottom - top))
+
+            pos += post.height
+
+        return 0
+
+    def _getLineForPost(self, postNumber: int) -> Optional[int]:
+        pos = 0
+
+        for cnt, post in enumerate(self.posts):
+            if cnt == postNumber:
+                return pos + self.top
+
+            pos += post.height
+
+        return None
+
     def processInput(self, inputVal: bytes) -> Optional[Action]:
         if inputVal == Terminal.UP:
             # Scroll up one line.
@@ -352,6 +387,77 @@ class TimelineComponent(Component):
             # Now, draw them.
             self.draw()
             self.renderer.status("")
+
+            return NullAction()
+
+        elif inputVal == b"p":
+            # Move to previous post.
+            postAndOffset = self._getPostForLine(self.top)
+            whichPost = int(postAndOffset)
+            if postAndOffset - whichPost == 0.0:
+                # We're on the top line of the current post, grab the previous.
+                whichPost -= 1
+            if whichPost < 0:
+                whichPost = 0;
+
+            # Figure out how much we have to move to get there.
+            newOffset = self._getLineForPost(whichPost)
+            if newOffset is not None:
+                moveAmount = self.offset - (newOffset - self.top)
+            else:
+                moveAmount = 0
+
+            if moveAmount > 0:
+                self.offset -= moveAmount
+
+                if moveAmount <= (self.bottom - self.top):
+                    # We can scroll to save render time.
+                    self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+                    self.terminal.sendCommand(Terminal.SET_NORMAL)
+                    self.terminal.setScrollRegion(self.top, self.bottom)
+                    self.terminal.moveCursor(self.top, 1)
+                    for _ in range(moveAmount):
+                        self.terminal.sendCommand(Terminal.MOVE_CURSOR_UP)
+                    for line in range(moveAmount):
+                        self._drawOneLine(self.top + line)
+                    self.terminal.clearScrollRegion()
+                    self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
+                else:
+                    # We must redraw the whole screen.
+                    self.draw()
+
+            return NullAction()
+
+        elif inputVal == b"n":
+            # Move to next post.
+            postAndOffset = self._getPostForLine(self.top)
+            whichPost = int(postAndOffset) + 1
+
+            # Figure out how much we have to move to get there.
+            newOffset = self._getLineForPost(whichPost)
+            if newOffset is not None:
+                moveAmount = (newOffset - self.top) - self.offset
+            else:
+                moveAmount = 0
+
+            if moveAmount > 0:
+                self.offset += moveAmount
+
+                if moveAmount <= (self.bottom - self.top):
+                    # We can scroll to save render time.
+                    self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+                    self.terminal.sendCommand(Terminal.SET_NORMAL)
+                    self.terminal.setScrollRegion(self.top, self.bottom)
+                    self.terminal.moveCursor(self.bottom, 1)
+                    for _ in range(moveAmount):
+                        self.terminal.sendCommand(Terminal.MOVE_CURSOR_DOWN)
+                    for line in range(moveAmount):
+                        self._drawOneLine((self.bottom - (moveAmount - 1)) + line)
+                    self.terminal.clearScrollRegion()
+                    self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
+                else:
+                    # We must redraw the whole screen.
+                    self.draw()
 
             return NullAction()
 
