@@ -655,6 +655,8 @@ class LoginComponent(Component):
         self.password = OneLineInputBox(renderer, password, 36, obfuscate=True)
 
         # Set up which component we're on.
+        self.left = (self.renderer.terminal.columns // 2) - 20
+        self.right = self.renderer.terminal.columns - self.left
         self.component = 0 if len(username) == 0 else (1 if len(password) == 0 else 2)
 
         # Now, draw the components.
@@ -673,13 +675,13 @@ class LoginComponent(Component):
 
     def __moveCursor(self) -> None:
         if self.component == 0:
-            self.terminal.moveCursor((self.top - 1) + 7, 22 + self.username.cursor)
+            self.terminal.moveCursor((self.top - 1) + 7, self.left + 2 + self.username.cursor)
         elif self.component == 1:
-            self.terminal.moveCursor((self.top - 1) + 10, 22 + self.password.cursor)
+            self.terminal.moveCursor((self.top - 1) + 10, self.left + 2 + self.password.cursor)
         elif self.component == 2:
-            self.terminal.moveCursor((self.top - 1) + 13, 23)
+            self.terminal.moveCursor((self.top - 1) + 13, self.left + 3)
         elif self.component == 3:
-            self.terminal.moveCursor((self.top - 1) + 13, 53)
+            self.terminal.moveCursor((self.top - 1) + 13, self.left + 33)
 
     def __summonBox(self) -> List[Tuple[str, List[ControlCodes]]]:
         # First, create the "log in" and "quit" buttons.
@@ -719,7 +721,7 @@ class LoginComponent(Component):
         lines = self.__summonBox()
         lines = lines[8:9]
         bounds = BoundingRectangle(
-            top=(self.top - 1) + 13, bottom=(self.top - 1) + 14, left=21, right=59
+            top=(self.top - 1) + 13, bottom=(self.top - 1) + 14, left=self.left + 1, right=self.right + 1
         )
         display(self.terminal, lines, bounds)
 
@@ -731,16 +733,16 @@ class LoginComponent(Component):
         for row in range(self.top, self.bottom + 1):
             self.terminal.moveCursor(row, 1)
             self.terminal.sendCommand(Terminal.CLEAR_LINE)
-        self.terminal.moveCursor((self.top - 1) + 3, 11)
+        self.terminal.moveCursor((self.top - 1) + 3, (self.left // 2) + 1)
         self.terminal.sendCommand(Terminal.DOUBLE_HEIGHT_TOP)
         self.terminal.sendText("Mastodon for VT-100")
-        self.terminal.moveCursor((self.top - 1) + 4, 11)
+        self.terminal.moveCursor((self.top - 1) + 4, (self.left // 2) + 1)
         self.terminal.sendCommand(Terminal.DOUBLE_HEIGHT_BOTTOM)
         self.terminal.sendText("Mastodon for VT-100")
 
         lines = self.__summonBox()
         bounds = BoundingRectangle(
-            top=(self.top - 1) + 5, bottom=(self.top - 1) + 16, left=21, right=59
+            top=(self.top - 1) + 5, bottom=(self.top - 1) + 16, left=self.left + 1, right=self.right + 1
         )
         display(self.terminal, lines, bounds)
 
@@ -838,9 +840,9 @@ class LoginComponent(Component):
             return NullAction()
         else:
             if self.component == 0:
-                return self.username.processInput(inputVal, (self.top - 1) + 7, 22)
+                return self.username.processInput(inputVal, (self.top - 1) + 7, self.left + 2)
             elif self.component == 1:
-                return self.password.processInput(inputVal, (self.top - 1) + 10, 22)
+                return self.password.processInput(inputVal, (self.top - 1) + 10, self.left + 2)
 
         return None
 
@@ -858,6 +860,8 @@ class ErrorComponent(Component):
 
         # Set up for what input we're handling.
         self.error = error
+        self.left = (self.renderer.terminal.columns // 2) - 20
+        self.right = self.renderer.terminal.columns - self.left
 
         # Now, draw the components.
         self.draw()
@@ -892,21 +896,21 @@ class ErrorComponent(Component):
         for row in range(self.top, self.bottom + 1):
             self.terminal.moveCursor(row, 1)
             self.terminal.sendCommand(Terminal.CLEAR_LINE)
-        self.terminal.moveCursor((self.top - 1) + 3, 11)
+        self.terminal.moveCursor((self.top - 1) + 3, (self.left // 2) + 1)
         self.terminal.sendCommand(Terminal.DOUBLE_HEIGHT_TOP)
         self.terminal.sendText("Mastodon for VT-100")
-        self.terminal.moveCursor((self.top - 1) + 4, 11)
+        self.terminal.moveCursor((self.top - 1) + 4, (self.left // 2) + 1)
         self.terminal.sendCommand(Terminal.DOUBLE_HEIGHT_BOTTOM)
         self.terminal.sendText("Mastodon for VT-100")
 
         lines = self.__summonBox()
         bounds = BoundingRectangle(
-            top=(self.top - 1) + 5, bottom=(self.top - 1) + 16, left=21, right=59
+            top=(self.top - 1) + 5, bottom=(self.top - 1) + 16, left=self.left + 1, right=self.right + 1
         )
         display(self.terminal, lines, bounds)
 
         # Now, put the cursor in the right spot.
-        self.terminal.moveCursor((self.top - 1) + 5 + (len(lines) - 3), 53)
+        self.terminal.moveCursor((self.top - 1) + 5 + (len(lines) - 3), self.left + 33)
 
     def processInput(self, inputVal: bytes) -> Optional[Action]:
         if inputVal == b"\r":
@@ -1006,7 +1010,7 @@ def spawnTimelineScreen(
     ]
 
 
-def spawnTerminal(port: str, baudrate: int, flow: bool) -> Terminal:
+def spawnTerminal(port: str, baudrate: int, flow: bool, wide: bool) -> Terminal:
     print("Attempting to contact VT-100...", end="")
     sys.stdout.flush()
 
@@ -1023,11 +1027,15 @@ def spawnTerminal(port: str, baudrate: int, flow: bool) -> Terminal:
             print(".", end="")
             sys.stdout.flush()
 
+    if wide:
+        terminal.set132Columns()
+    else:
+        terminal.set80Columns()
     return terminal
 
 
 def main(
-    server: str, username: str, password: str, port: str, baudrate: int, flow: bool
+    server: str, username: str, password: str, port: str, baudrate: int, flow: bool, wide: bool
 ) -> int:
     # First, attempt to talk to the server.
     client = Client(server)
@@ -1035,7 +1043,7 @@ def main(
     exiting = False
     while not exiting:
         # First, attempt to talk to the terminal, and get the current page rendering.
-        terminal = spawnTerminal(port, baudrate, flow)
+        terminal = spawnTerminal(port, baudrate, flow, wide)
         renderer = Renderer(terminal, client)
         if not renderer.components:
             if client.valid:
@@ -1101,6 +1109,11 @@ if __name__ == "__main__":
         help="Enable software-based flow control (XON/XOFF)",
     )
     parser.add_argument(
+        "--wide",
+        action="store_true",
+        help="Enable wide mode (132 characters instead of 80 characters)",
+    )
+    parser.add_argument(
         "server",
         metavar="SERVER",
         type=str,
@@ -1125,5 +1138,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     sys.exit(
-        main(args.server, args.username, args.password, args.port, args.baud, args.flow)
+        main(args.server, args.username, args.password, args.port, args.baud, args.flow, args.wide)
     )
