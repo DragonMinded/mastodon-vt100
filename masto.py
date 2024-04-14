@@ -123,6 +123,26 @@ def join(
     return accum
 
 
+def account(name: str, username: str, width: int) -> Tuple[str, Sequence[ControlCodes]]:
+    name = sanitize(name)
+    rest = f" @{sanitize(username)}"
+    leftover = width - len(rest)
+    if len(name) > leftover:
+        name = name[:(leftover - 3)] + "\u2022\u2022\u2022"
+
+    return highlight(f"<b>{name}</b>{rest}")
+
+
+def boost(name: str, username: str, width: int) -> Tuple[str, Sequence[ControlCodes]]:
+    name = sanitize(name)
+    rest = f" (@{sanitize(username)}) boosted"
+    leftover = width - len(rest)
+    if len(name) > leftover:
+        name = name[:(leftover - 3)] + "\u2022\u2022\u2022"
+
+    return highlight(f"{name}{rest}")
+
+
 class TimelinePost:
     def __init__(self, renderer: "Renderer", data: Dict[str, Any]) -> None:
         self.renderer = renderer
@@ -131,16 +151,14 @@ class TimelinePost:
         reblog = self.data["reblog"]
         if reblog:
             # First, start with the name of the reblogger.
-            account = emoji.demojize(striplow(self.data["account"]["display_name"]))
+            name = emoji.demojize(striplow(self.data["account"]["display_name"]))
             username = emoji.demojize(striplow(self.data["account"]["acct"]))
-            boostline = highlight(
-                f"{sanitize(account)} (@{sanitize(username)}) boosted"
-            )
+            boostline = boost(name, username, renderer.columns - 2)
 
             # Now, grab the original name.
-            account = emoji.demojize(striplow(reblog["account"]["display_name"]))
+            name = emoji.demojize(striplow(reblog["account"]["display_name"]))
             username = emoji.demojize(striplow(reblog["account"]["acct"]))
-            nameline = highlight(f"<b>{sanitize(account)}</b> @{sanitize(username)}")
+            nameline = account(name, username, renderer.columns - 2)
 
             content = emoji.demojize(striplow(reblog["content"]))
             content, codes = html(content)
@@ -162,9 +180,9 @@ class TimelinePost:
             ]
         else:
             # First, start with the name of the account.
-            account = emoji.demojize(striplow(self.data["account"]["display_name"]))
+            name = emoji.demojize(striplow(self.data["account"]["display_name"]))
             username = emoji.demojize(striplow(self.data["account"]["acct"]))
-            nameline = highlight(f"<b>{sanitize(account)}</b> @{sanitize(username)}")
+            nameline = account(name, username, renderer.columns - 2)
 
             content = emoji.demojize(striplow(self.data["content"]))
             content, codes = html(content)
@@ -560,9 +578,9 @@ class OneLineInputBox:
     @property
     def lines(self) -> List[Tuple[str, List[ControlCodes]]]:
         if self.obfuscate:
-            return [highlight("<r>" + pad(obfuscate(self.text), 36) + "</r>")]
+            return [highlight("<r>" + pad(obfuscate(self.text), self.length) + "</r>")]
         else:
-            return [highlight("<r>" + pad(self.text, 36) + "</r>")]
+            return [highlight("<r>" + pad(self.text, self.length) + "</r>")]
 
     def draw(self, row: int, column: int) -> None:
         bounds = BoundingRectangle(
