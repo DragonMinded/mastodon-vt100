@@ -128,7 +128,7 @@ def account(name: str, username: str, width: int) -> Tuple[str, Sequence[Control
     rest = f" @{sanitize(username)}"
     leftover = width - len(rest)
     if len(name) > leftover:
-        name = name[:(leftover - 3)] + "\u2022\u2022\u2022"
+        name = name[: (leftover - 3)] + "\u2022\u2022\u2022"
 
     return highlight(f"<b>{name}</b>{rest}")
 
@@ -138,7 +138,7 @@ def boost(name: str, username: str, width: int) -> Tuple[str, Sequence[ControlCo
     rest = f" (@{sanitize(username)}) boosted"
     leftover = width - len(rest)
     if len(name) > leftover:
-        name = name[:(leftover - 3)] + "\u2022\u2022\u2022"
+        name = name[: (leftover - 3)] + "\u2022\u2022\u2022"
 
     return highlight(f"{name}{rest}")
 
@@ -208,7 +208,8 @@ class TimelinePost:
         attachmentLines = []
         for attachment in attachments:
             alt = striplow(
-                emoji.demojize(attachment["description"] or "no description"), allow_safe=True
+                emoji.demojize(attachment["description"] or "no description"),
+                allow_safe=True,
             )
             url = (attachment["url"] or "").split("/")[-1]
             description, codes = highlight(f"<u>{url}</u>: {alt}")
@@ -693,9 +694,13 @@ class LoginComponent(Component):
 
     def __moveCursor(self) -> None:
         if self.component == 0:
-            self.terminal.moveCursor((self.top - 1) + 7, self.left + 2 + self.username.cursor)
+            self.terminal.moveCursor(
+                (self.top - 1) + 7, self.left + 2 + self.username.cursor
+            )
         elif self.component == 1:
-            self.terminal.moveCursor((self.top - 1) + 10, self.left + 2 + self.password.cursor)
+            self.terminal.moveCursor(
+                (self.top - 1) + 10, self.left + 2 + self.password.cursor
+            )
         elif self.component == 2:
             self.terminal.moveCursor((self.top - 1) + 13, self.left + 3)
         elif self.component == 3:
@@ -739,7 +744,10 @@ class LoginComponent(Component):
         lines = self.__summonBox()
         lines = lines[8:9]
         bounds = BoundingRectangle(
-            top=(self.top - 1) + 13, bottom=(self.top - 1) + 14, left=self.left + 1, right=self.right + 1
+            top=(self.top - 1) + 13,
+            bottom=(self.top - 1) + 14,
+            left=self.left + 1,
+            right=self.right + 1,
         )
         display(self.terminal, lines, bounds)
 
@@ -760,7 +768,10 @@ class LoginComponent(Component):
 
         lines = self.__summonBox()
         bounds = BoundingRectangle(
-            top=(self.top - 1) + 5, bottom=(self.top - 1) + 16, left=self.left + 1, right=self.right + 1
+            top=(self.top - 1) + 5,
+            bottom=(self.top - 1) + 16,
+            left=self.left + 1,
+            right=self.right + 1,
         )
         display(self.terminal, lines, bounds)
 
@@ -858,9 +869,13 @@ class LoginComponent(Component):
             return NullAction()
         else:
             if self.component == 0:
-                return self.username.processInput(inputVal, (self.top - 1) + 7, self.left + 2)
+                return self.username.processInput(
+                    inputVal, (self.top - 1) + 7, self.left + 2
+                )
             elif self.component == 1:
-                return self.password.processInput(inputVal, (self.top - 1) + 10, self.left + 2)
+                return self.password.processInput(
+                    inputVal, (self.top - 1) + 10, self.left + 2
+                )
 
         return None
 
@@ -923,7 +938,10 @@ class ErrorComponent(Component):
 
         lines = self.__summonBox()
         bounds = BoundingRectangle(
-            top=(self.top - 1) + 5, bottom=(self.top - 1) + 16, left=self.left + 1, right=self.right + 1
+            top=(self.top - 1) + 5,
+            bottom=(self.top - 1) + 16,
+            left=self.left + 1,
+            right=self.right + 1,
         )
         display(self.terminal, lines, bounds)
 
@@ -1053,7 +1071,13 @@ def spawnTerminal(port: str, baudrate: int, flow: bool, wide: bool) -> Terminal:
 
 
 def main(
-    server: str, username: str, password: str, port: str, baudrate: int, flow: bool, wide: bool
+    server: str,
+    username: str,
+    password: str,
+    port: str,
+    baudrate: int,
+    flow: bool,
+    wide: bool,
 ) -> int:
     # First, attempt to talk to the server.
     client = Client(server)
@@ -1156,5 +1180,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     sys.exit(
-        main(args.server, args.username, args.password, args.port, args.baud, args.flow, args.wide)
+        main(
+            args.server,
+            args.username,
+            args.password,
+            args.port,
+            args.baud,
+            args.flow,
+            args.wide,
+        )
     )
