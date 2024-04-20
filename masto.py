@@ -191,6 +191,8 @@ class TimelinePost:
                 boxbottom(renderer.columns),
             ]
 
+        self.height = len(self.lines)
+
     def __format_attachments(
         self, attachments: List[Dict[str, Any]]
     ) -> List[Tuple[str, List[ControlCodes]]]:
@@ -214,10 +216,6 @@ class TimelinePost:
             ]
 
         return attachmentLines
-
-    @property
-    def height(self) -> int:
-        return len(self.lines)
 
     def draw(self, top: int, bottom: int, offset: int, postno: Optional[int]) -> None:
         # Maybe there's a better way to do this? Maybe display() should take substitutions?
@@ -366,20 +364,17 @@ class TimelineComponent(Component):
         pos = -self.offset
         viewHeight = (self.bottom - self.top) + 1
 
+        # We don't break here, so that we can have an easier time telling if
+        # something's changed when calling this, by making sure that a post which
+        # comes into or goes out of visibility which doesn't change the ordering
+        # doesn't cause a redraw.
         for cnt, post in enumerate(self.posts):
-            if pos >= viewHeight:
-                # Too low below the viewport.
-                break
             if pos + post.height <= 0:
                 # Too high above the viewport.
                 pos += post.height
                 continue
 
             top = pos + self.top
-            bottom = top + post.height
-            if bottom > self.bottom:
-                bottom = self.bottom
-
             ret[top] = cnt
             pos += post.height
 
@@ -407,7 +402,7 @@ class TimelineComponent(Component):
                 self.offset -= 1
 
                 newPositions = self._postIndexes()
-                postNumberRedraw = (self.positions.values() != newPositions.values())
+                postNumberRedraw = (list(self.positions.values()) != list(newPositions.values()))
                 self.positions = newPositions
 
                 self.terminal.sendCommand(Terminal.SAVE_CURSOR)
@@ -418,7 +413,9 @@ class TimelineComponent(Component):
                 # Redraw post numbers if necessary.
                 if postNumberRedraw:
                     for line in self.positions.keys():
-                        if line == self.top:
+                        if line <= self.top:
+                            continue
+                        if line > self.bottom:
                             continue
                         self._drawOneLine(line)
 
@@ -434,7 +431,7 @@ class TimelineComponent(Component):
                 self.offset += 1
 
                 newPositions = self._postIndexes()
-                postNumberRedraw = (self.positions.values() != newPositions.values())
+                postNumberRedraw = (list(self.positions.values()) != list(newPositions.values()))
                 self.positions = newPositions
 
                 self.terminal.sendCommand(Terminal.SAVE_CURSOR)
@@ -445,7 +442,9 @@ class TimelineComponent(Component):
                 # Redraw post numbers if necessary.
                 if postNumberRedraw:
                     for line in self.positions.keys():
-                        if line == self.bottom:
+                        if line < self.top:
+                            continue
+                        if line >= self.bottom:
                             continue
                         self._drawOneLine(line)
 
@@ -477,7 +476,7 @@ class TimelineComponent(Component):
                     self.offset = 0
 
                     newPositions = self._postIndexes()
-                    postNumberRedraw = (self.positions.values() != newPositions.values())
+                    postNumberRedraw = (list(self.positions.values()) != list(newPositions.values()))
                     self.positions = newPositions
 
                     self.terminal.sendCommand(Terminal.SAVE_CURSOR)
@@ -490,6 +489,10 @@ class TimelineComponent(Component):
                     if postNumberRedraw:
                         skippables = {x for x in range(self.top, self.top + drawAmount)}
                         for line in self.positions.keys():
+                            if line < self.top:
+                                continue
+                            if line > self.bottom:
+                                continue
                             if line in skippables:
                                 continue
                             self._drawOneLine(line)
@@ -547,7 +550,7 @@ class TimelineComponent(Component):
                 self.offset -= moveAmount
 
                 newPositions = self._postIndexes()
-                postNumberRedraw = (self.positions.values() != newPositions.values())
+                postNumberRedraw = (list(self.positions.values()) != list(newPositions.values()))
                 self.positions = newPositions
 
                 if moveAmount <= (self.bottom - self.top):
@@ -562,6 +565,10 @@ class TimelineComponent(Component):
                     if postNumberRedraw:
                         skippables = {x for x in range(self.top, self.top + moveAmount)}
                         for line in self.positions.keys():
+                            if line < self.top:
+                                continue
+                            if line > self.bottom:
+                                continue
                             if line in skippables:
                                 continue
                             self._drawOneLine(line)
@@ -600,7 +607,7 @@ class TimelineComponent(Component):
                 self.offset += moveAmount
 
                 newPositions = self._postIndexes()
-                postNumberRedraw = (self.positions.values() != newPositions.values())
+                postNumberRedraw = (list(self.positions.values()) != list(newPositions.values()))
                 self.positions = newPositions
 
                 if moveAmount <= (self.bottom - self.top):
@@ -615,6 +622,10 @@ class TimelineComponent(Component):
                     if postNumberRedraw:
                         skippables = {x for x in range(self.bottom - (moveAmount - 1), self.bottom + 1)}
                         for line in self.positions.keys():
+                            if line < self.top:
+                                continue
+                            if line > self.bottom:
+                                continue
                             if line in skippables:
                                 continue
                             self._drawOneLine(line)
