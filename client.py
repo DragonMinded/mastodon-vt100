@@ -70,12 +70,12 @@ class Client:
             raise BadLoginError("Bad username or password!")
 
     def fetchTimeline(
-        self, which: Timeline, *, since: Optional[Dict[str, Any]] = None
+        self, which: Timeline, *, limit: int = 20, since: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
         self.__assert_valid()
 
         if which == Timeline.HOME:
-            statuses = self.__client.timeline(timeline="home", max_id=since)
+            statuses = self.__client.timeline(timeline="home", limit=limit, max_id=since)
         else:
             raise Exception("Unknown timeline to fetch!")
 

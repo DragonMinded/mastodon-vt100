@@ -23,6 +23,10 @@ class ExitAction(Action):
     pass
 
 
+class BackAction(Action):
+    pass
+
+
 class SwapScreenAction(Action):
     def __init__(
         self, swap: Callable[["Renderer"], None], **params: Dict[str, Any]
@@ -44,22 +48,7 @@ class Component:
     def properties(self) -> Dict[str, Any]:
         return self.renderer.properties
 
-    def scrollUp(self) -> None:
-        pass
-
-    def scrollDown(self) -> None:
-        pass
-
-    def pageUp(self) -> None:
-        pass
-
-    def pageDown(self) -> None:
-        pass
-
-    def goToTop(self) -> None:
-        pass
-
-    def goToBottom(self) -> None:
+    def draw(self) -> None:
         pass
 
     def processInput(self, inputVal: bytes) -> Optional[Action]:
@@ -259,11 +248,11 @@ class TimelineComponent(Component):
         # Now, format each post into it's own component.
         self.posts = [TimelinePost(self.renderer, status) for status in self.statuses]
 
-        # Now, draw them.
-        self.draw()
+    def draw(self) -> None:
+        self.__draw()
         self.renderer.status("")
 
-    def draw(self) -> Optional[Tuple[int, int]]:
+    def __draw(self) -> Optional[Tuple[int, int]]:
         pos = -self.offset
         viewHeight = (self.bottom - self.top) + 1
 
@@ -435,7 +424,7 @@ class TimelineComponent(Component):
             else:
                 # We must redraw the whole screen.
                 self.offset = 0
-                self.draw()
+                self.__draw()
 
             handled = True
 
@@ -453,7 +442,7 @@ class TimelineComponent(Component):
             ]
 
             # Now, draw them.
-            self.draw()
+            self.__draw()
             self.renderer.status("")
 
             return NullAction()
@@ -492,7 +481,7 @@ class TimelineComponent(Component):
                     self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
                 else:
                     # We must redraw the whole screen.
-                    self.draw()
+                    self.__draw()
 
             handled = True
 
@@ -530,7 +519,7 @@ class TimelineComponent(Component):
                     self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
                 else:
                     # We must redraw the whole screen.
-                    possibleLineList = self.draw()
+                    possibleLineList = self.__draw()
                     if possibleLineList is not None:
                         start, end = possibleLineList
                         for line in range(start, end + 1):
@@ -678,12 +667,6 @@ class LoginComponent(Component):
         self.right = self.renderer.terminal.columns - self.left
         self.component = 0 if len(username) == 0 else (1 if len(password) == 0 else 2)
 
-        # Now, draw the components.
-        self.draw()
-        self.renderer.status(
-            f"Please enter your credentials for {self.properties['server']}."
-        )
-
     def __login(self) -> bool:
         # Attempt to log in.
         try:
@@ -774,6 +757,11 @@ class LoginComponent(Component):
             right=self.right + 1,
         )
         display(self.terminal, lines, bounds)
+
+        # Finally, display the status.
+        self.renderer.status(
+            f"Please enter your credentials for {self.properties['server']}."
+        )
 
         # Now, put the cursor in the right spot.
         self.__moveCursor()
@@ -896,9 +884,6 @@ class ErrorComponent(Component):
         self.left = (self.renderer.terminal.columns // 2) - 20
         self.right = self.renderer.terminal.columns - self.left
 
-        # Now, draw the components.
-        self.draw()
-
     def __summonBox(self) -> List[Tuple[str, List[ControlCodes]]]:
         # First, create the "quit" button.
         quit = [
@@ -944,6 +929,7 @@ class ErrorComponent(Component):
             right=self.right + 1,
         )
         display(self.terminal, lines, bounds)
+        self.renderer.status("")
 
         # Now, put the cursor in the right spot.
         self.terminal.moveCursor((self.top - 1) + 5 + (len(lines) - 3), self.left + 33)
@@ -969,9 +955,31 @@ class Renderer:
         self.properties: Dict[str, Any] = {}
 
         # Start with no components.
-        self.components: List[Component] = []
-        self.lastStatus: Optional[str] = None
+        self.__components: List[Component] = []
+        self.__stack: List[List[Component]] = []
+        self.__lastStatus: Optional[str] = None
         self.status("")
+
+    def replace(self, components: List[Component]) -> None:
+        self.__components = components[:]
+        self.__stack = []
+        for component in self.__components:
+            component.draw()
+
+    def push(self, components: List[Component]) -> None:
+        if self.__components:
+            self.__stack.append(self.__components)
+        self.__components = components[:]
+        for component in self.__components:
+            component.draw()
+
+    def pop(self) -> None:
+        if self.__stack:
+            self.__components = self.__stack[-1]
+            self.__stack = self.__stack[:-1]
+
+            for component in self.__components:
+                component.draw()
 
     @property
     def rows(self) -> int:
@@ -982,10 +990,11 @@ class Renderer:
         return self.terminal.columns
 
     def status(self, text: str) -> None:
-        if text == self.lastStatus:
+        if text == self.__lastStatus:
             return
 
-        self.lastStatus = text
+        self.__lastStatus = text
+        row, col = self.terminal.fetchCursor()
         self.terminal.sendCommand(Terminal.SAVE_CURSOR)
         self.terminal.moveCursor(self.terminal.rows, 1)
         self.terminal.sendCommand(Terminal.SET_NORMAL)
@@ -993,9 +1002,13 @@ class Renderer:
         self.terminal.sendText(pad(text, self.terminal.columns))
         self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
 
+        # Work around a bug with cursor report timing after drawing status
+        # on the original VT-10X terminals.
+        self.terminal.moveCursor(row, col)
+
     def processInput(self, inputVal: bytes) -> Optional[Action]:
         # First, try handling it with the registered components.
-        for component in self.components:
+        for component in self.__components:
             possible = component.processInput(inputVal)
             if possible:
                 return possible
@@ -1011,7 +1024,7 @@ class Renderer:
 def spawnLoginScreen(
     renderer: Renderer, *, server: str = "", username: str = "", password: str = ""
 ) -> None:
-    renderer.components = [
+    renderer.replace([
         LoginComponent(
             renderer,
             top=1,
@@ -1020,7 +1033,7 @@ def spawnLoginScreen(
             username=username,
             password=password,
         )
-    ]
+    ])
 
 
 def spawnErrorScreen(
@@ -1028,22 +1041,22 @@ def spawnErrorScreen(
     *,
     error: str = "Unknown error.",
 ) -> None:
-    renderer.components = [
+    renderer.replace([
         ErrorComponent(
             renderer,
             top=1,
             bottom=renderer.rows,
             error=error,
         )
-    ]
+    ])
 
 
 def spawnTimelineScreen(
     renderer: Renderer, *, timeline: Timeline = Timeline.HOME
 ) -> None:
-    renderer.components = [
+    renderer.push([
         TimelineComponent(renderer, top=1, bottom=renderer.rows, timeline=timeline)
-    ]
+    ])
 
 
 def spawnTerminal(port: str, baudrate: int, flow: bool, wide: bool) -> Terminal:
@@ -1087,16 +1100,15 @@ def main(
         # First, attempt to talk to the terminal, and get the current page rendering.
         terminal = spawnTerminal(port, baudrate, flow, wide)
         renderer = Renderer(terminal, client)
-        if not renderer.components:
-            if client.valid:
-                spawnLoginScreen(
-                    renderer, server=server, username=username, password=password
-                )
-            else:
-                spawnErrorScreen(
-                    renderer,
-                    error=f"Cannot connect to server {server}.",
-                )
+        if client.valid:
+            spawnLoginScreen(
+                renderer, server=server, username=username, password=password
+            )
+        else:
+            spawnErrorScreen(
+                renderer,
+                error=f"Cannot connect to server {server}.",
+            )
 
         try:
             while not exiting:
@@ -1115,6 +1127,8 @@ def main(
                         exiting = True
                     elif isinstance(action, SwapScreenAction):
                         action.swap(renderer, **action.params)
+                    elif isinstance(action, BackAction):
+                        renderer.pop()
 
         except TerminalException:
             # Terminal went away mid-transaction.
