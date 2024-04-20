@@ -219,7 +219,16 @@ class TimelinePost:
     def height(self) -> int:
         return len(self.lines)
 
-    def draw(self, top: int, bottom: int, offset: int) -> None:
+    def draw(self, top: int, bottom: int, offset: int, postno: Optional[int]) -> None:
+        # Maybe there's a better way to do this? Maybe display() should take substitutions?
+        if postno is not None:
+            replace = f"\u2524{postno}\u251c"
+        else:
+            replace = "\u2500\u2500\u2500"
+        replaced, codes = self.lines[0]
+        replaced = replaced[:1] + replace + replaced[4:]
+        self.lines[0] = (replaced, codes)
+
         bounds = BoundingRectangle(
             top=top, bottom=bottom + 1, left=1, right=self.renderer.columns + 1
         )
@@ -248,6 +257,10 @@ class TimelineComponent(Component):
         # Now, format each post into it's own component.
         self.posts = [TimelinePost(self.renderer, status) for status in self.statuses]
 
+        # Keep track of the top of each post, and it's post number, so we can
+        # render deep-dive numbers.
+        self.positions: Dict[int, int] = self._postIndexes()
+
     def draw(self) -> None:
         self.__draw()
         self.renderer.status("")
@@ -270,7 +283,9 @@ class TimelineComponent(Component):
             if bottom > self.bottom:
                 bottom = self.bottom
 
-            post.draw(top, bottom, 0)
+            minpost = self.positions[min(self.positions.keys())]
+            postno = self.positions.get(top)
+            post.draw(top, bottom, 0, postno - minpost + 1 if postno is not None else None)
             pos += post.height
 
         pos += self.top
@@ -312,7 +327,9 @@ class TimelineComponent(Component):
                 pos += post.height
                 continue
 
-            post.draw(line, line, offset)
+            minpost = self.positions[min(self.positions.keys())]
+            postno = self.positions.get(pos + self.top)
+            post.draw(line, line, offset, postno - minpost + 1 if postno is not None else None)
             return True
 
         self.renderer.terminal.moveCursor(line, 1)
@@ -343,6 +360,31 @@ class TimelineComponent(Component):
 
         return 0
 
+    def _postIndexes(self) -> Dict[int, int]:
+        ret: Dict[int, int] = {}
+
+        pos = -self.offset
+        viewHeight = (self.bottom - self.top) + 1
+
+        for cnt, post in enumerate(self.posts):
+            if pos >= viewHeight:
+                # Too low below the viewport.
+                break
+            if pos + post.height <= 0:
+                # Too high above the viewport.
+                pos += post.height
+                continue
+
+            top = pos + self.top
+            bottom = top + post.height
+            if bottom > self.bottom:
+                bottom = self.bottom
+
+            ret[top] = cnt
+            pos += post.height
+
+        return ret
+
     def _getLineForPost(self, postNumber: int) -> Optional[int]:
         pos = 0
 
@@ -364,11 +406,22 @@ class TimelineComponent(Component):
             if self.offset > 0:
                 self.offset -= 1
 
+                newPositions = self._postIndexes()
+                postNumberRedraw = (self.positions.values() != newPositions.values())
+                self.positions = newPositions
+
                 self.terminal.sendCommand(Terminal.SAVE_CURSOR)
-                self.terminal.sendCommand(Terminal.SET_NORMAL)
                 self.terminal.setScrollRegion(self.top, self.bottom)
                 self.terminal.moveCursor(self.top, 1)
                 self.terminal.sendCommand(Terminal.MOVE_CURSOR_UP)
+
+                # Redraw post numbers if necessary.
+                if postNumberRedraw:
+                    for line in self.positions.keys():
+                        if line == self.top:
+                            continue
+                        self._drawOneLine(line)
+
                 self._drawOneLine(self.top)
                 self.terminal.clearScrollRegion()
                 self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
@@ -380,11 +433,22 @@ class TimelineComponent(Component):
             if self.offset < 0xFFFFFFFF:
                 self.offset += 1
 
+                newPositions = self._postIndexes()
+                postNumberRedraw = (self.positions.values() != newPositions.values())
+                self.positions = newPositions
+
                 self.terminal.sendCommand(Terminal.SAVE_CURSOR)
-                self.terminal.sendCommand(Terminal.SET_NORMAL)
                 self.terminal.setScrollRegion(self.top, self.bottom)
                 self.terminal.moveCursor(self.bottom, 1)
                 self.terminal.sendCommand(Terminal.MOVE_CURSOR_DOWN)
+
+                # Redraw post numbers if necessary.
+                if postNumberRedraw:
+                    for line in self.positions.keys():
+                        if line == self.bottom:
+                            continue
+                        self._drawOneLine(line)
+
                 if not self._drawOneLine(self.bottom):
                     # The line draw didn't do anything, so we need to fetch more
                     # data after we finish drawing.
@@ -406,25 +470,39 @@ class TimelineComponent(Component):
 
         elif inputVal == b"t":
             # Move to top of page.
-            if self.offset < (self.bottom - self.top) + 1:
-                # We can scroll to save render time.
-                drawAmount = self.offset
-                self.offset = 0
+            if self.offset > 0:
+                if self.offset < (self.bottom - self.top) + 1:
+                    # We can scroll to save render time.
+                    drawAmount = self.offset
+                    self.offset = 0
 
-                self.terminal.sendCommand(Terminal.SAVE_CURSOR)
-                self.terminal.sendCommand(Terminal.SET_NORMAL)
-                self.terminal.setScrollRegion(self.top, self.bottom)
-                self.terminal.moveCursor(self.top, 1)
-                for _ in range(drawAmount):
-                    self.terminal.sendCommand(Terminal.MOVE_CURSOR_UP)
-                for line in range(drawAmount):
-                    self._drawOneLine(self.top + line)
-                self.terminal.clearScrollRegion()
-                self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
-            else:
-                # We must redraw the whole screen.
-                self.offset = 0
-                self.__draw()
+                    newPositions = self._postIndexes()
+                    postNumberRedraw = (self.positions.values() != newPositions.values())
+                    self.positions = newPositions
+
+                    self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+                    self.terminal.setScrollRegion(self.top, self.bottom)
+                    self.terminal.moveCursor(self.top, 1)
+                    for _ in range(drawAmount):
+                        self.terminal.sendCommand(Terminal.MOVE_CURSOR_UP)
+
+                    # Redraw post numbers if necessary.
+                    if postNumberRedraw:
+                        skippables = {x for x in range(self.top, self.top + drawAmount)}
+                        for line in self.positions.keys():
+                            if line in skippables:
+                                continue
+                            self._drawOneLine(line)
+
+                    for line in range(drawAmount):
+                        self._drawOneLine(self.top + line)
+                    self.terminal.clearScrollRegion()
+                    self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
+                else:
+                    # We must redraw the whole screen.
+                    self.offset = 0
+                    self.positions = self._postIndexes()
+                    self.__draw()
 
             handled = True
 
@@ -440,6 +518,7 @@ class TimelineComponent(Component):
             self.posts = [
                 TimelinePost(self.renderer, status) for status in self.statuses
             ]
+            self.positions = self._postIndexes()
 
             # Now, draw them.
             self.__draw()
@@ -467,14 +546,26 @@ class TimelineComponent(Component):
             if moveAmount > 0:
                 self.offset -= moveAmount
 
+                newPositions = self._postIndexes()
+                postNumberRedraw = (self.positions.values() != newPositions.values())
+                self.positions = newPositions
+
                 if moveAmount <= (self.bottom - self.top):
                     # We can scroll to save render time.
                     self.terminal.sendCommand(Terminal.SAVE_CURSOR)
-                    self.terminal.sendCommand(Terminal.SET_NORMAL)
                     self.terminal.setScrollRegion(self.top, self.bottom)
                     self.terminal.moveCursor(self.top, 1)
                     for _ in range(moveAmount):
                         self.terminal.sendCommand(Terminal.MOVE_CURSOR_UP)
+
+                    # Redraw post numbers if necessary.
+                    if postNumberRedraw:
+                        skippables = {x for x in range(self.top, self.top + moveAmount)}
+                        for line in self.positions.keys():
+                            if line in skippables:
+                                continue
+                            self._drawOneLine(line)
+
                     for line in range(moveAmount):
                         self._drawOneLine(self.top + line)
                     self.terminal.clearScrollRegion()
@@ -490,8 +581,16 @@ class TimelineComponent(Component):
             postAndOffset = self._getPostForLine(self.top)
             whichPost = int(postAndOffset) + 1
 
-            # Figure out how much we have to move to get there.
-            newOffset = self._getLineForPost(whichPost)
+            if whichPost == len(self.posts) and whichPost > 0:
+                # Possibly scrolling to the next entry that hasn't been fetched.
+                newOffset = self._getLineForPost(whichPost - 1)
+                if newOffset is None:
+                    raise Exception("Logic error, should always be able to get a line for an existing post.")
+                newOffset += self.posts[whichPost - 1].height
+            else:
+                # Figure out how much we have to move to get there.
+                newOffset = self._getLineForPost(whichPost)
+
             if newOffset is not None:
                 moveAmount = (newOffset - self.top) - self.offset
             else:
@@ -500,14 +599,26 @@ class TimelineComponent(Component):
             if moveAmount > 0:
                 self.offset += moveAmount
 
+                newPositions = self._postIndexes()
+                postNumberRedraw = (self.positions.values() != newPositions.values())
+                self.positions = newPositions
+
                 if moveAmount <= (self.bottom - self.top):
                     # We can scroll to save render time.
                     self.terminal.sendCommand(Terminal.SAVE_CURSOR)
-                    self.terminal.sendCommand(Terminal.SET_NORMAL)
                     self.terminal.setScrollRegion(self.top, self.bottom)
                     self.terminal.moveCursor(self.bottom, 1)
                     for _ in range(moveAmount):
                         self.terminal.sendCommand(Terminal.MOVE_CURSOR_DOWN)
+
+                    # Redraw post numbers if necessary.
+                    if postNumberRedraw:
+                        skippables = {x for x in range(self.bottom - (moveAmount - 1), self.bottom + 1)}
+                        for line in self.positions.keys():
+                            if line in skippables:
+                                continue
+                            self._drawOneLine(line)
+
                     for line in range(moveAmount):
                         actualLine = (self.bottom - (moveAmount - 1)) + line
                         if not self._drawOneLine(actualLine):
@@ -546,6 +657,10 @@ class TimelineComponent(Component):
 
             self.statuses += newStatuses
             self.posts += newPosts
+
+            # We don't care about whether this changed the order, because it can't.
+            # It can only ever add onto the order.
+            self.positions = self._postIndexes()
 
             # Now, draw them.
             for line in infiniteScrollRedraw:
