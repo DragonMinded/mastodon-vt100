@@ -283,7 +283,9 @@ class TimelineComponent(Component):
 
             minpost = self.positions[min(self.positions.keys())]
             postno = self.positions.get(top)
-            post.draw(top, bottom, 0, postno - minpost + 1 if postno is not None else None)
+            post.draw(
+                top, bottom, 0, postno - minpost + 1 if postno is not None else None
+            )
             pos += post.height
 
         pos += self.top
@@ -327,7 +329,9 @@ class TimelineComponent(Component):
 
             minpost = self.positions[min(self.positions.keys())]
             postno = self.positions.get(pos + self.top)
-            post.draw(line, line, offset, postno - minpost + 1 if postno is not None else None)
+            post.draw(
+                line, line, offset, postno - minpost + 1 if postno is not None else None
+            )
             return True
 
         self.renderer.terminal.moveCursor(line, 1)
@@ -362,7 +366,6 @@ class TimelineComponent(Component):
         ret: Dict[int, int] = {}
 
         pos = -self.offset
-        viewHeight = (self.bottom - self.top) + 1
 
         # We don't break here, so that we can have an easier time telling if
         # something's changed when calling this, by making sure that a post which
@@ -402,7 +405,9 @@ class TimelineComponent(Component):
                 self.offset -= 1
 
                 newPositions = self._postIndexes()
-                postNumberRedraw = (list(self.positions.values()) != list(newPositions.values()))
+                postNumberRedraw = list(self.positions.values()) != list(
+                    newPositions.values()
+                )
                 self.positions = newPositions
 
                 self.terminal.sendCommand(Terminal.SAVE_CURSOR)
@@ -431,7 +436,9 @@ class TimelineComponent(Component):
                 self.offset += 1
 
                 newPositions = self._postIndexes()
-                postNumberRedraw = (list(self.positions.values()) != list(newPositions.values()))
+                postNumberRedraw = list(self.positions.values()) != list(
+                    newPositions.values()
+                )
                 self.positions = newPositions
 
                 self.terminal.sendCommand(Terminal.SAVE_CURSOR)
@@ -476,7 +483,9 @@ class TimelineComponent(Component):
                     self.offset = 0
 
                     newPositions = self._postIndexes()
-                    postNumberRedraw = (list(self.positions.values()) != list(newPositions.values()))
+                    postNumberRedraw = list(self.positions.values()) != list(
+                        newPositions.values()
+                    )
                     self.positions = newPositions
 
                     self.terminal.sendCommand(Terminal.SAVE_CURSOR)
@@ -550,7 +559,9 @@ class TimelineComponent(Component):
                 self.offset -= moveAmount
 
                 newPositions = self._postIndexes()
-                postNumberRedraw = (list(self.positions.values()) != list(newPositions.values()))
+                postNumberRedraw = list(self.positions.values()) != list(
+                    newPositions.values()
+                )
                 self.positions = newPositions
 
                 if moveAmount <= (self.bottom - self.top):
@@ -592,7 +603,9 @@ class TimelineComponent(Component):
                 # Possibly scrolling to the next entry that hasn't been fetched.
                 newOffset = self._getLineForPost(whichPost - 1)
                 if newOffset is None:
-                    raise Exception("Logic error, should always be able to get a line for an existing post.")
+                    raise Exception(
+                        "Logic error, should always be able to get a line for an existing post."
+                    )
                 newOffset += self.posts[whichPost - 1].height
             else:
                 # Figure out how much we have to move to get there.
@@ -607,7 +620,9 @@ class TimelineComponent(Component):
                 self.offset += moveAmount
 
                 newPositions = self._postIndexes()
-                postNumberRedraw = (list(self.positions.values()) != list(newPositions.values()))
+                postNumberRedraw = list(self.positions.values()) != list(
+                    newPositions.values()
+                )
                 self.positions = newPositions
 
                 if moveAmount <= (self.bottom - self.top):
@@ -620,7 +635,12 @@ class TimelineComponent(Component):
 
                     # Redraw post numbers if necessary.
                     if postNumberRedraw:
-                        skippables = {x for x in range(self.bottom - (moveAmount - 1), self.bottom + 1)}
+                        skippables = {
+                            x
+                            for x in range(
+                                self.bottom - (moveAmount - 1), self.bottom + 1
+                            )
+                        }
                         for line in self.positions.keys():
                             if line < self.top:
                                 continue
@@ -1150,16 +1170,18 @@ class Renderer:
 def spawnLoginScreen(
     renderer: Renderer, *, server: str = "", username: str = "", password: str = ""
 ) -> None:
-    renderer.replace([
-        LoginComponent(
-            renderer,
-            top=1,
-            bottom=renderer.rows,
-            server=server,
-            username=username,
-            password=password,
-        )
-    ])
+    renderer.replace(
+        [
+            LoginComponent(
+                renderer,
+                top=1,
+                bottom=renderer.rows,
+                server=server,
+                username=username,
+                password=password,
+            )
+        ]
+    )
 
 
 def spawnErrorScreen(
@@ -1167,22 +1189,24 @@ def spawnErrorScreen(
     *,
     error: str = "Unknown error.",
 ) -> None:
-    renderer.replace([
-        ErrorComponent(
-            renderer,
-            top=1,
-            bottom=renderer.rows,
-            error=error,
-        )
-    ])
+    renderer.replace(
+        [
+            ErrorComponent(
+                renderer,
+                top=1,
+                bottom=renderer.rows,
+                error=error,
+            )
+        ]
+    )
 
 
 def spawnTimelineScreen(
     renderer: Renderer, *, timeline: Timeline = Timeline.HOME
 ) -> None:
-    renderer.push([
-        TimelineComponent(renderer, top=1, bottom=renderer.rows, timeline=timeline)
-    ])
+    renderer.push(
+        [TimelineComponent(renderer, top=1, bottom=renderer.rows, timeline=timeline)]
+    )
 
 
 def spawnTerminal(port: str, baudrate: int, flow: bool, wide: bool) -> Terminal:
