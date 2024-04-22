@@ -1,6 +1,8 @@
 vtpy @ git+https://github.com/DragonMinded/vtpy.git
 mastodon.py
 emoji
+pytz
+tzlocal
 mypy
 flake8
 black

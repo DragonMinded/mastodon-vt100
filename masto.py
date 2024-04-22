@@ -2,13 +2,15 @@ import argparse
 import emoji
 import sys
 import time
+from datetime import datetime
+from tzlocal import get_localzone
 
 from vtpy import SerialTerminal, Terminal, TerminalException
 from client import Client, Timeline, BadLoginError
 from clip import BoundingRectangle
 from text import ControlCodes, display, highlight, html, sanitize, striplow, wordwrap
 
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 
 class Action:
@@ -92,11 +94,63 @@ def boxmiddle(
     return (text, codes)
 
 
+def replace(
+    original: Tuple[str, Sequence[ControlCodes]],
+    replacement: Union[str, Tuple[str, Sequence[ControlCodes]]],
+    offset: int = 0,
+) -> Tuple[str, List[ControlCodes]]:
+    # First, grab the text and codes we're replacing.
+    originalText, originalCodes = original
+
+    # Now, figure out if the replacement is just text or a tuple.
+    if isinstance(replacement, str):
+        text = replacement
+        codes = None
+    else:
+        text, codes = replacement
+
+    # Now, bounds check the replacement.
+    if offset >= 0:
+        # Offset is positive, from the left.
+        if (offset + len(text)) > len(originalText):
+            amount = len(originalText) - offset
+            text = text[:amount]
+            if codes is not None:
+                codes = codes[:amount]
+    else:
+        # Offset is negative, from the right.
+        offset = (len(originalText) - len(text)) + offset
+        if offset < 0:
+            text = text[(-offset):]
+            if codes is not None:
+                codes = codes[(-offset):]
+            offset = 0
+
+    # Now, insert just the text, or the text and codes.
+    if codes is None:
+        return (
+            originalText[:offset] + text + originalText[(offset + len(text)) :],
+            list(originalCodes),
+        )
+    else:
+        return (
+            originalText[:offset] + text + originalText[(offset + len(text)) :],
+            [*originalCodes[:offset], *codes, *originalCodes[(offset + len(codes)) :]],
+        )
+
+
 def pad(line: str, length: int) -> str:
     if len(line) >= length:
         return line[:length]
     amount = length - len(line)
     return line + (" " * amount)
+
+
+def lpad(line: str, length: int) -> str:
+    if len(line) >= length:
+        return line[:length]
+    amount = length - len(line)
+    return (" " * amount) + line
 
 
 def obfuscate(line: str) -> str:
@@ -161,11 +215,14 @@ class TimelinePost:
                 *self.__format_attachments(reblog["media_attachments"]),
             ]
 
+            # Stats formatting.
+            stats = self.__format_stats(self.data["created_at"], reblog)
+
             # Now, surround the post in a box.
             self.lines = [
                 boxtop(renderer.columns),
                 *[boxmiddle(line, renderer.columns) for line in textlines],
-                boxbottom(renderer.columns),
+                replace(boxbottom(renderer.columns), stats, offset=-2),
             ]
         else:
             # First, start with the name of the account.
@@ -184,14 +241,54 @@ class TimelinePost:
                 *self.__format_attachments(self.data["media_attachments"]),
             ]
 
+            # Stats formatting.
+            stats = self.__format_stats(self.data["created_at"], self.data)
+
             # Now, surround the post in a box.
             self.lines = [
                 boxtop(renderer.columns),
                 *[boxmiddle(line, renderer.columns) for line in textlines],
-                boxbottom(renderer.columns),
+                replace(boxbottom(renderer.columns), stats, offset=-2),
             ]
 
         self.height = len(self.lines)
+
+    def __format_stats(
+        self,
+        timestamp: datetime,
+        data: Dict[str, Any],
+    ) -> Tuple[str, List[ControlCodes]]:
+        stats: List[str] = []
+
+        # Timestamp
+        stats.append(
+            timestamp.astimezone(get_localzone())
+            .strftime("%a, %b %d, %Y, %I:%M:%S %p")
+            .replace(" 0", " ")
+        )
+
+        # Replies
+        stats.append(f"{self.data['replies_count']} C")
+
+        # Reblogs
+        if self.data["reblogged"]:
+            stats.append(f"<bold>{self.data['reblogs_count']} R</bold>")
+        else:
+            stats.append(f"{self.data['reblogs_count']} R")
+
+        # Likes
+        if self.data["favourited"]:
+            stats.append(f"<bold>{self.data['favourites_count']} L</bold>")
+        else:
+            stats.append(f"{self.data['favourites_count']} L")
+
+        # Bookmarks
+        if self.data["bookmarked"]:
+            stats.append("<bold>B</bold>")
+        else:
+            stats.append("B")
+
+        return highlight("\u2524" + "\u251c\u2500\u2524".join(stats) + "\u251c")
 
     def __format_attachments(
         self, attachments: List[Dict[str, Any]]
@@ -220,12 +317,10 @@ class TimelinePost:
     def draw(self, top: int, bottom: int, offset: int, postno: Optional[int]) -> None:
         # Maybe there's a better way to do this? Maybe display() should take substitutions?
         if postno is not None:
-            replace = f"\u2524{postno}\u251c"
+            postText = f"\u2524{postno}\u251c"
         else:
-            replace = "\u2500\u2500\u2500"
-        replaced, codes = self.lines[0]
-        replaced = replaced[:1] + replace + replaced[4:]
-        self.lines[0] = (replaced, codes)
+            postText = "\u2500\u2500\u2500"
+        self.lines[0] = replace(self.lines[0], postText, offset=2)
 
         bounds = BoundingRectangle(
             top=top, bottom=bottom + 1, left=1, right=self.renderer.columns + 1
