@@ -37,6 +37,10 @@ class SwapScreenAction(Action):
         self.params = params or {}
 
 
+FOCUS_INPUT: bytes = b"\x01"
+CTRL_C_INPUT: bytes = b"\x03"
+
+
 class Component:
     def __init__(self, renderer: "Renderer", top: int, bottom: int) -> None:
         self.renderer = renderer
@@ -796,6 +800,17 @@ class TimelineComponent(Component):
         return NullAction()
 
 
+class NewPostComponent:
+    def __init__(self, renderer: "Renderer", top: int, bottom: int) -> None:
+        super().__init__(renderer, top, bottom)
+
+    def draw(self) -> None:
+        pass
+
+    def processInput(self, inputVal: bytes) -> Optional[Action]:
+        return None
+
+
 class OneLineInputBox:
     def __init__(
         self, renderer: "Renderer", text: str, length: int, *, obfuscate: bool = False
@@ -833,6 +848,10 @@ class OneLineInputBox:
                 self.renderer.terminal.moveCursor(row, column + self.cursor)
 
             return NullAction()
+        elif inputVal == FOCUS_INPUT:
+            self.renderer.terminal.moveCursor(row, column + self.cursor)
+            return NullAction()
+
         elif inputVal in {Terminal.BACKSPACE, Terminal.DELETE}:
             if self.text:
                 # Just subtract from input.
@@ -861,10 +880,10 @@ class OneLineInputBox:
 
             return NullAction()
         else:
-            if len(self.text) < (self.length - 1):
-                # If we got some unprintable character, ignore it.
-                inputVal = bytes(v for v in inputVal if v >= 0x20)
-                if inputVal:
+            # If we got some unprintable character, ignore it.
+            inputVal = bytes(v for v in inputVal if v >= 0x20)
+            if inputVal:
+                if len(self.text) < (self.length - 1):
                     # Just add to input.
                     char = inputVal.decode("ascii")
 
@@ -880,7 +899,11 @@ class OneLineInputBox:
                         self.cursor += 1
                         self.draw(row, column)
 
-            return NullAction()
+                return NullAction()
+
+            # For control characters, don't claim we did anything with them, so parent
+            # components can act on them.
+            return None
 
         return None
 
@@ -918,13 +941,9 @@ class LoginComponent(Component):
 
     def __moveCursor(self) -> None:
         if self.component == 0:
-            self.terminal.moveCursor(
-                (self.top - 1) + 7, self.left + 2 + self.username.cursor
-            )
+            self.username.processInput(FOCUS_INPUT, (self.top - 1) + 7, self.left + 2)
         elif self.component == 1:
-            self.terminal.moveCursor(
-                (self.top - 1) + 10, self.left + 2 + self.password.cursor
-            )
+            self.password.processInput(FOCUS_INPUT, (self.top - 1) + 10, self.left + 2)
         elif self.component == 2:
             self.terminal.moveCursor((self.top - 1) + 13, self.left + 3)
         elif self.component == 3:
@@ -1255,7 +1274,7 @@ class Renderer:
                 return possible
 
         # Now, handle it with our own code.
-        if inputVal == b"\x03":
+        if inputVal == CTRL_C_INPUT:
             return ExitAction()
 
         # Nothing to do
