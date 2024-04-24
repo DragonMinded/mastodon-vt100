@@ -11,7 +11,7 @@ from drawhelpers import (
     account,
 )
 from renderer import Renderer
-from subcomponent import TimelinePost, OneLineInputBox, MultiLineInputBox
+from subcomponent import TimelinePost, FocusWrapper, Button, OneLineInputBox, MultiLineInputBox
 from text import ControlCodes, display, highlight, wordwrap, pad
 
 from typing import Any, Dict, List, Optional, Tuple
@@ -587,12 +587,16 @@ class LoginComponent(Component):
         # Set up which component we're on.
         self.left = (self.renderer.terminal.columns // 2) - 20
         self.right = self.renderer.terminal.columns - self.left
-        self.component = 0 if len(username) == 0 else (1 if len(password) == 0 else 2)
+        component = 0 if len(username) == 0 else (1 if len(password) == 0 else 2)
 
         # Set up for what input we're handling.
         self.properties["server"] = server
         self.username = OneLineInputBox(renderer, username, (self.top - 1) + 7, self.left + 2, 36)
         self.password = OneLineInputBox(renderer, password, (self.top - 1) + 10, self.left + 2, 36, obfuscate=True)
+        self.login = Button(renderer, "login", (self.top - 1) + 12, self.left + 2, focused=component == 2)
+        self.quit = Button(renderer, "quit", (self.top - 1) + 12, self.left + 32, focused=component == 3)
+
+        self.focusWrapper = FocusWrapper([self.username, self.password, self.login, self.quit], component)
 
     def __login(self) -> bool:
         # Attempt to log in.
@@ -602,28 +606,10 @@ class LoginComponent(Component):
         except BadLoginError:
             return False
 
-    def __moveCursor(self) -> None:
-        if self.component == 0:
-            self.username.processInput(FOCUS_INPUT)
-        elif self.component == 1:
-            self.password.processInput(FOCUS_INPUT)
-        elif self.component == 2:
-            self.terminal.moveCursor((self.top - 1) + 13, self.left + 3)
-        elif self.component == 3:
-            self.terminal.moveCursor((self.top - 1) + 13, self.left + 33)
-
     def __summonBox(self) -> List[Tuple[str, List[ControlCodes]]]:
         # First, create the "log in" and "quit" buttons.
-        login = [
-            boxtop(7),
-            boxmiddle(highlight("<b>login</b>" if self.component == 2 else "login"), 7),
-            boxbottom(7),
-        ]
-        quit = [
-            boxtop(6),
-            boxmiddle(highlight("<b>quit</b>" if self.component == 3 else "quit"), 6),
-            boxbottom(6),
-        ]
+        login = self.login.lines
+        quit = self.quit.lines
 
         # Now, create the "middle bit" between the buttons.
         middle = highlight(pad("", 36 - 7 - 6))
@@ -645,20 +631,6 @@ class LoginComponent(Component):
         ]
 
         return lines
-
-    def __redrawButtons(self) -> None:
-        lines = self.__summonBox()
-        lines = lines[8:9]
-        bounds = BoundingRectangle(
-            top=(self.top - 1) + 13,
-            bottom=(self.top - 1) + 14,
-            left=self.left + 1,
-            right=self.right + 1,
-        )
-        display(self.terminal, lines, bounds)
-
-        # Now, put the cursor back.
-        self.__moveCursor()
 
     def draw(self) -> None:
         # First, clear the screen and draw our logo.
@@ -687,37 +659,23 @@ class LoginComponent(Component):
         )
 
         # Now, put the cursor in the right spot.
-        self.__moveCursor()
+        self.focusWrapper.focus()
 
     def processInput(self, inputVal: bytes) -> Optional[Action]:
         if inputVal == Terminal.UP:
             # Go to previous component.
-            if self.component > 0:
-                self.component -= 1
+            self.focusWrapper.previous()
 
-                # Redraw prompt, in case they typed a bad username and password.
-                if self.component == 1:
-                    self.renderer.status(
-                        f"Please enter your credentials for {self.properties['server']}."
-                    )
-
-                # We only need to redraw buttons if we left one behind.
-                if self.component != 0:
-                    self.__redrawButtons()
-                else:
-                    self.__moveCursor()
+            # Redraw prompt, in case they typed a bad username and password.
+            if self.focusWrapper.component == 1:
+                self.renderer.status(
+                    f"Please enter your credentials for {self.properties['server']}."
+                )
 
             return NullAction()
         elif inputVal == Terminal.DOWN:
             # Go to next component.
-            if self.component < 3:
-                self.component += 1
-
-                # We only need to redraw buttons if we entered one.
-                if self.component >= 2:
-                    self.__redrawButtons()
-                else:
-                    self.__moveCursor()
+            self.focusWrapper.next()
 
             return NullAction()
         elif inputVal == b"\r":
@@ -725,20 +683,10 @@ class LoginComponent(Component):
             return NullAction()
         elif inputVal == b"\t":
             # Client pressed tab.
-            if self.component == 0:
-                self.component += 1
-                self.__moveCursor()
-            elif self.component == 1:
-                self.component += 1
-                self.__redrawButtons()
-            elif self.component == 2:
-                self.component += 1
-                self.__redrawButtons()
-            elif self.component == 3:
-                self.component = 0
-                self.__redrawButtons()
+            self.focusWrapper.next(wrap=True)
 
-                # Redraw prompt, in case they typed a bad username and password.
+            # Redraw prompt, in case they typed a bad username and password.
+            if self.focusWrapper.component == 0:
                 self.renderer.status(
                     f"Please enter your credentials for {self.properties['server']}."
                 )
@@ -746,13 +694,9 @@ class LoginComponent(Component):
             return NullAction()
         elif inputVal == b"\n":
             # Client pressed enter.
-            if self.component == 0:
-                self.component += 1
-                self.__moveCursor()
-            elif self.component == 1:
-                self.component += 1
-                self.__redrawButtons()
-            elif self.component == 2:
+            if self.focusWrapper.component in {0, 1}:
+                self.focusWrapper.next()
+            elif self.focusWrapper.component == 2:
                 # Actually attempt to log in.
                 if self.__login():
                     # Preserve the username so all scenes can access it.
@@ -776,16 +720,13 @@ class LoginComponent(Component):
                     return SwapScreenAction(spawnTimelineScreen)
                 else:
                     self.renderer.status("Invalid username or password!")
-            elif self.component == 3:
+            elif self.focusWrapper.component == 3:
                 # Client wants out.
                 return ExitAction()
 
             return NullAction()
         else:
-            if self.component == 0:
-                return self.username.processInput(inputVal)
-            elif self.component == 1:
-                return self.password.processInput(inputVal)
+            return self.focusWrapper.processInput(inputVal)
 
         return None
 

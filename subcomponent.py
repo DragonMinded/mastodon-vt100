@@ -1,10 +1,11 @@
 import emoji
+from abc import ABC
 from datetime import datetime
 from tzlocal import get_localzone
 
 from vtpy import Terminal
 
-from action import Action, NullAction, FOCUS_INPUT
+from action import Action, NullAction, FOCUS_INPUT, UNFOCUS_INPUT
 from clip import BoundingRectangle
 from drawhelpers import (
     boost,
@@ -171,7 +172,108 @@ class TimelinePost:
         display(self.renderer.terminal, self.lines[offset:], bounds)
 
 
-class OneLineInputBox:
+class Focusable(ABC):
+    def processInput(self, inputVal: bytes) -> Optional[Action]:
+        ...
+
+
+class FocusWrapper:
+    def __init__(self, subcomponents: List[Focusable], component: int) -> None:
+        self.subcomponents = subcomponents
+        self.component = component
+
+    def focus(self) -> None:
+        self.subcomponents[self.component].processInput(FOCUS_INPUT)
+
+    def processInput(self, inputVal: bytes) -> Optional[Action]:
+        return self.subcomponents[self.component].processInput(inputVal)
+
+    def previous(self, wrap: bool = False) -> None:
+        if self.component > 0:
+            self.subcomponents[self.component].processInput(UNFOCUS_INPUT)
+            self.component -= 1
+            self.subcomponents[self.component].processInput(FOCUS_INPUT)
+        elif wrap:
+            self.subcomponents[self.component].processInput(UNFOCUS_INPUT)
+            self.component = len(self.subcomponents) - 1
+            self.subcomponents[self.component].processInput(FOCUS_INPUT)
+
+    def next(self, wrap: bool = False) -> None:
+        if self.component < (len(self.subcomponents) - 1):
+            self.subcomponents[self.component].processInput(UNFOCUS_INPUT)
+            self.component += 1
+            self.subcomponents[self.component].processInput(FOCUS_INPUT)
+        elif wrap:
+            self.subcomponents[self.component].processInput(UNFOCUS_INPUT)
+            self.component = 0
+            self.subcomponents[self.component].processInput(FOCUS_INPUT)
+
+
+class Button(Focusable):
+    def __init__(
+        self, renderer: "Renderer", caption: str, row: int, column: int, *, focused: bool = False
+    ):
+        self.renderer = renderer
+        self.caption = caption
+        self.row = row
+        self.column = column
+        self.focused = focused
+
+    @property
+    def lines(self) -> List[Tuple[str, List[ControlCodes]]]:
+        width = len(self.caption) + 2
+        return [
+            boxtop(width),
+            boxmiddle(highlight(f"<b>{self.caption}</b>" if self.focused else self.caption), width),
+            boxbottom(width),
+        ]
+
+    def draw(self) -> None:
+        bounds = BoundingRectangle(
+            top=self.row, bottom=self.row + 3, left=self.column, right=self.column + len(self.caption) + 2,
+        )
+        display(self.renderer.terminal, self.lines, bounds)
+        if self.focused:
+            self.renderer.terminal.moveCursor(self.row + 1, self.column + 1)
+
+    def processInput(self, inputVal: bytes) -> Optional[Action]:
+        oldFocus = self.focused
+        if inputVal == FOCUS_INPUT:
+            self.focused = True
+
+            if not oldFocus:
+                # Must draw focus bold.
+                bounds = BoundingRectangle(
+                    top=self.row + 1,
+                    bottom=self.row + 2,
+                    left=self.column,
+                    right=self.column + len(self.caption) + 2
+                )
+                display(self.renderer.terminal, self.lines[1:2], bounds)
+
+            # Move cursor to the right spot.
+            self.renderer.terminal.moveCursor(self.row + 1, self.column + 1)
+            return NullAction()
+
+        elif inputVal == UNFOCUS_INPUT:
+            self.focused = False
+
+            if oldFocus:
+                # Must draw unfocus normal.
+                bounds = BoundingRectangle(
+                    top=self.row + 1,
+                    bottom=self.row + 2,
+                    left=self.column,
+                    right=self.column + len(self.caption) + 2
+                )
+                display(self.renderer.terminal, self.lines[1:2], bounds)
+
+            return NullAction()
+
+        return None
+
+
+class OneLineInputBox(Focusable):
     def __init__(
         self, renderer: "Renderer", text: str, row: int, column: int, length: int, *, obfuscate: bool = False
     ) -> None:
@@ -243,7 +345,7 @@ class OneLineInputBox:
             return NullAction()
         else:
             # If we got some unprintable character, ignore it.
-            inputVal = bytes(v for v in inputVal if v >= 0x20)
+            inputVal = bytes(v for v in inputVal if v >= 0x20 and v < 0x80)
             if inputVal:
                 if len(self.text) < (self.length - 1):
                     # Just add to input.
@@ -270,7 +372,7 @@ class OneLineInputBox:
         return None
 
 
-class MultiLineInputBox:
+class MultiLineInputBox(Focusable):
     def __init__(
         self, renderer: "Renderer", text: str, row: int, column: int, width: int, height: int,
     ) -> None:
