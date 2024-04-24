@@ -743,28 +743,24 @@ class ErrorComponent(Component):
         super().__init__(renderer, top, bottom)
 
         # Set up for what input we're handling.
-        self.error = error
         self.left = (self.renderer.terminal.columns // 2) - 20
         self.right = self.renderer.terminal.columns - self.left
 
+        text, codes = highlight(error)
+        self.textbits = wordwrap(text, codes, 36)
+        self.quit = Button(renderer, "quit", self.top + 6 + len(self.textbits), self.left + 32, focused=True)
+
     def __summonBox(self) -> List[Tuple[str, List[ControlCodes]]]:
         # First, create the "quit" button.
-        quit = [
-            boxtop(6),
-            boxmiddle(highlight("<b>quit</b>"), 6),
-            boxbottom(6),
-        ]
+        quit = self.quit.lines
 
         # Now, create the "middle bit" between the buttons.
         middle = highlight(pad("", 36 - 6))
 
-        text, codes = highlight(self.error)
-        textbits = wordwrap(text, codes, 36)
-
         # Now, create the error box itself.
         lines = [
             boxtop(38),
-            *[boxmiddle(bit, 38) for bit in textbits],
+            *[boxmiddle(bit, 38) for bit in self.textbits],
             boxmiddle(highlight(""), 38),
             *[boxmiddle(join([middle, quit[x]]), 38) for x in range(len(quit))],
             boxbottom(38),
@@ -795,7 +791,7 @@ class ErrorComponent(Component):
         self.renderer.status("")
 
         # Now, put the cursor in the right spot.
-        self.terminal.moveCursor((self.top - 1) + 5 + (len(lines) - 3), self.left + 33)
+        self.quit.processInput(FOCUS_INPUT)
 
     def processInput(self, inputVal: bytes) -> Optional[Action]:
         if inputVal == b"\r":
