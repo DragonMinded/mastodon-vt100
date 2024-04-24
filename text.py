@@ -527,6 +527,24 @@ def display(
                 break
 
 
+def pad(line: str, length: int) -> str:
+    if len(line) >= length:
+        return line[:length]
+    amount = length - len(line)
+    return line + (" " * amount)
+
+
+def lpad(line: str, length: int) -> str:
+    if len(line) >= length:
+        return line[:length]
+    amount = length - len(line)
+    return (" " * amount) + line
+
+
+def obfuscate(line: str) -> str:
+    return "*" * len(line)
+
+
 if __name__ == "__main__":
     # I know there's a billion better ways to do this but IDGAF.
     def verify(
