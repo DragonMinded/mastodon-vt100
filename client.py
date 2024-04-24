@@ -86,3 +86,11 @@ class Client:
             raise Exception("Unknown timeline to fetch!")
 
         return cast(List[Dict[str, Any]], statuses)
+
+    def getAccountInfo(self, accountID: Optional[int] = None) -> Dict[str, Any]:
+        self.__assert_valid()
+
+        if accountID:
+            return cast(Dict[str, Any], self.__client.account(accountID))
+        else:
+            return cast(Dict[str, Any], self.__client.me())

@@ -524,7 +524,7 @@ class NewPostComponent(Component):
                 [
                     highlight("Posting as "),
                     account(
-                        "?", self.properties["username"], self.renderer.columns - 13
+                        self.properties["account"]["display_name"], self.properties["username"], self.renderer.columns - 13
                     ),
                 ]
             )
@@ -540,14 +540,20 @@ class NewPostComponent(Component):
         pass
 
     def draw(self) -> None:
+        # First, draw the top bits.
         lines = self.__summonBox()
         bounds = BoundingRectangle(
             top=self.top,
-            bottom=self.bottom + 1,
+            bottom=self.top + len(lines),
             left=1,
             right=self.renderer.columns + 1,
         )
         display(self.terminal, lines, bounds)
+
+        # Now, clear the rest of the display.
+        for line in range(self.top + len(lines), self.bottom + 1):
+            self.terminal.moveCursor(line, 1)
+            self.terminal.sendCommand(Terminal.CLEAR_LINE)
 
         # Now, put the cursor back.
         self.__moveCursor()
@@ -742,6 +748,9 @@ class LoginComponent(Component):
                 if self.__login():
                     # Preserve the username so all scenes can access it.
                     self.properties["username"] = self.username.text
+
+                    # Look up other account info for everyone to use.
+                    self.properties["account"] = self.client.getAccountInfo()
 
                     self.renderer.status("Login successful, fetching timeline...")
 
