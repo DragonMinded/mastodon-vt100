@@ -192,7 +192,7 @@ class OneLineInputBox:
 
     def draw(self) -> None:
         bounds = BoundingRectangle(
-            top=self.row, bottom=self.row + 1, left=self.column, right=self.column + self.length + 1
+            top=self.row, bottom=self.row + 1, left=self.column, right=self.column + self.length
         )
         display(self.renderer.terminal, self.lines, bounds)
         self.renderer.terminal.moveCursor(self.row, self.column + self.cursor)
@@ -266,5 +266,72 @@ class OneLineInputBox:
             # For control characters, don't claim we did anything with them, so parent
             # components can act on them.
             return None
+
+        return None
+
+
+class MultiLineInputBox:
+    def __init__(
+        self, renderer: "Renderer", text: str, row: int, column: int, width: int, height: int,
+    ) -> None:
+        self.renderer = renderer
+        self.text = text
+        self.cursor = len(self.text)
+        self.row = row
+        self.column = column
+        self.width = width
+        self.height = height
+        self.obfuscate = obfuscate
+
+    @property
+    def lines(self) -> List[Tuple[str, List[ControlCodes]]]:
+        # First, word wrap to put the text in the right spot.
+        code = ControlCodes(reverse=True)
+        lines = wordwrap(self.text, [code] * len(self.text), self.width)
+        lines = lines[:self.height]
+
+        # Now, make sure any unfilled lines are drawn.
+        while len(lines) < self.height:
+            lines.append((" " * self.width, [code] * self.width))
+
+        # We must make sure that each line is padded out to the right length.
+        output: List[Tuple[str, List[ControlCodes]]] = []
+        for i in range(len(lines)):
+            text, codes = lines[i]
+            amount = self.width - len(text)
+            if amount > 0:
+                output.append((text + (" " * amount), [*codes, *([code] * amount)]))
+            else:
+                output.append((text, list(codes)))
+
+        return output
+
+    def __moveCursor(self) -> None:
+        # Calculate where the cursor actually is.
+        lines = wordwrap(self.text, self.text, self.width)
+        text = "\n".join(t for t, _ in lines)
+
+        row = self.row
+        column = self.column
+        for i in range(self.cursor):
+            if text[i] == "\n":
+                row += 1
+                column = self.column
+            else:
+                column += 1
+
+        self.renderer.terminal.moveCursor(row, column)
+
+    def draw(self) -> None:
+        bounds = BoundingRectangle(
+            top=self.row, bottom=self.row + self.height, left=self.column, right=self.column + self.width
+        )
+        display(self.renderer.terminal, self.lines, bounds)
+        self.__moveCursor()
+
+    def processInput(self, inputVal: bytes) -> Optional[Action]:
+        if inputVal == FOCUS_INPUT:
+            self.__moveCursor()
+            return NullAction()
 
         return None

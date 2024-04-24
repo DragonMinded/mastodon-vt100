@@ -11,7 +11,7 @@ from drawhelpers import (
     account,
 )
 from renderer import Renderer
-from subcomponent import TimelinePost, OneLineInputBox
+from subcomponent import TimelinePost, OneLineInputBox, MultiLineInputBox
 from text import ControlCodes, display, highlight, wordwrap, pad
 
 from typing import Any, Dict, List, Optional, Tuple
@@ -515,6 +515,9 @@ class NewPostComponent(Component):
 
         self.component = 0
 
+        self.postBody = MultiLineInputBox(renderer, "", self.top + 2, 2, self.renderer.columns - 2, 10)
+        self.cw = OneLineInputBox(renderer, "", self.top + 13, 2, self.renderer.columns - 2)
+
     def __summonBox(self) -> List[Tuple[str, List[ControlCodes]]]:
         lines: List[Tuple[str, List[ControlCodes]]] = []
 
@@ -529,6 +532,9 @@ class NewPostComponent(Component):
                 ]
             )
         )
+        lines.extend(self.postBody.lines)
+        lines.append(highlight("Optional CW:"))
+        lines.append(self.cw.lines[0])
 
         return [
             boxtop(self.renderer.columns),
@@ -537,7 +543,10 @@ class NewPostComponent(Component):
         ]
 
     def __moveCursor(self) -> None:
-        pass
+        if self.component == 0:
+            self.postBody.processInput(FOCUS_INPUT)
+        elif self.component == 1:
+            self.cw.processInput(FOCUS_INPUT)
 
     def draw(self) -> None:
         # First, draw the top bits.
