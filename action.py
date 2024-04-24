@@ -29,5 +29,6 @@ class SwapScreenAction(Action):
         self.params = params or {}
 
 
-FOCUS_INPUT: bytes = b"\x01"
+FOCUS_INPUT: bytes = b"\x80"
+UNFOCUS_INPUT: bytes = b"\x81"
 CTRL_C_INPUT: bytes = b"\x03"
