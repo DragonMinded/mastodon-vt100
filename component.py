@@ -575,15 +575,15 @@ class LoginComponent(Component):
     ) -> None:
         super().__init__(renderer, top, bottom)
 
-        # Set up for what input we're handling.
-        self.properties["server"] = server
-        self.username = OneLineInputBox(renderer, username, 36)
-        self.password = OneLineInputBox(renderer, password, 36, obfuscate=True)
-
         # Set up which component we're on.
         self.left = (self.renderer.terminal.columns // 2) - 20
         self.right = self.renderer.terminal.columns - self.left
         self.component = 0 if len(username) == 0 else (1 if len(password) == 0 else 2)
+
+        # Set up for what input we're handling.
+        self.properties["server"] = server
+        self.username = OneLineInputBox(renderer, username, (self.top - 1) + 7, self.left + 2, 36)
+        self.password = OneLineInputBox(renderer, password, (self.top - 1) + 10, self.left + 2, 36, obfuscate=True)
 
     def __login(self) -> bool:
         # Attempt to log in.
@@ -595,9 +595,9 @@ class LoginComponent(Component):
 
     def __moveCursor(self) -> None:
         if self.component == 0:
-            self.username.processInput(FOCUS_INPUT, (self.top - 1) + 7, self.left + 2)
+            self.username.processInput(FOCUS_INPUT)
         elif self.component == 1:
-            self.password.processInput(FOCUS_INPUT, (self.top - 1) + 10, self.left + 2)
+            self.password.processInput(FOCUS_INPUT)
         elif self.component == 2:
             self.terminal.moveCursor((self.top - 1) + 13, self.left + 3)
         elif self.component == 3:
@@ -774,13 +774,9 @@ class LoginComponent(Component):
             return NullAction()
         else:
             if self.component == 0:
-                return self.username.processInput(
-                    inputVal, (self.top - 1) + 7, self.left + 2
-                )
+                return self.username.processInput(inputVal)
             elif self.component == 1:
-                return self.password.processInput(
-                    inputVal, (self.top - 1) + 10, self.left + 2
-                )
+                return self.password.processInput(inputVal)
 
         return None
 

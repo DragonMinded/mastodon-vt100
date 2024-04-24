@@ -173,11 +173,13 @@ class TimelinePost:
 
 class OneLineInputBox:
     def __init__(
-        self, renderer: "Renderer", text: str, length: int, *, obfuscate: bool = False
+        self, renderer: "Renderer", text: str, row: int, column: int, length: int, *, obfuscate: bool = False
     ) -> None:
         self.renderer = renderer
         self.text = text[:length]
         self.cursor = len(self.text)
+        self.row = row
+        self.column = column
         self.length = length
         self.obfuscate = obfuscate
 
@@ -188,28 +190,28 @@ class OneLineInputBox:
         else:
             return [highlight("<r>" + pad(self.text, self.length) + "</r>")]
 
-    def draw(self, row: int, column: int) -> None:
+    def draw(self) -> None:
         bounds = BoundingRectangle(
-            top=row, bottom=row + 1, left=column, right=column + self.length + 1
+            top=self.row, bottom=self.row + 1, left=self.column, right=self.column + self.length + 1
         )
         display(self.renderer.terminal, self.lines, bounds)
-        self.renderer.terminal.moveCursor(row, column + self.cursor)
+        self.renderer.terminal.moveCursor(self.row, self.column + self.cursor)
 
-    def processInput(self, inputVal: bytes, row: int, column: int) -> Optional[Action]:
+    def processInput(self, inputVal: bytes) -> Optional[Action]:
         if inputVal == Terminal.LEFT:
             if self.cursor > 0:
                 self.cursor -= 1
-                self.renderer.terminal.moveCursor(row, column + self.cursor)
+                self.renderer.terminal.moveCursor(self.row, self.column + self.cursor)
 
             return NullAction()
         elif inputVal == Terminal.RIGHT:
             if self.cursor < len(self.text):
                 self.cursor += 1
-                self.renderer.terminal.moveCursor(row, column + self.cursor)
+                self.renderer.terminal.moveCursor(self.row, self.column + self.cursor)
 
             return NullAction()
         elif inputVal == FOCUS_INPUT:
-            self.renderer.terminal.moveCursor(row, column + self.cursor)
+            self.renderer.terminal.moveCursor(self.row, self.column + self.cursor)
             return NullAction()
 
         elif inputVal in {Terminal.BACKSPACE, Terminal.DELETE}:
@@ -220,7 +222,7 @@ class OneLineInputBox:
                     self.text = self.text[:-1]
 
                     self.cursor -= 1
-                    self.draw(row, column)
+                    self.draw()
                 elif self.cursor == 0:
                     # Erasing at the beginning, do nothing.
                     pass
@@ -229,14 +231,14 @@ class OneLineInputBox:
                     self.text = self.text[1:]
 
                     self.cursor -= 1
-                    self.draw(row, column)
+                    self.draw()
                 else:
                     # Erasing in the middle of the line.
                     spot = self.cursor - 1
                     self.text = self.text[:spot] + self.text[(spot + 1) :]
 
                     self.cursor -= 1
-                    self.draw(row, column)
+                    self.draw()
 
             return NullAction()
         else:
@@ -251,13 +253,13 @@ class OneLineInputBox:
                         # Just appending to the input.
                         self.text += char
                         self.cursor += 1
-                        self.draw(row, column)
+                        self.draw()
                     else:
                         # Adding to mid-input.
                         spot = self.cursor
                         self.text = self.text[:spot] + char + self.text[spot:]
                         self.cursor += 1
-                        self.draw(row, column)
+                        self.draw()
 
                 return NullAction()
 
