@@ -638,6 +638,10 @@ class TimelineComponent(Component):
             return NullAction()
 
         elif inputVal == b"p":
+            # Post a new post action.
+            return SwapScreenAction(spawnPostScreen)
+
+        elif inputVal == b"p":
             # Move to previous post.
             postAndOffset = self._getPostForLine(self.top)
             whichPost = int(postAndOffset)
@@ -800,17 +804,6 @@ class TimelineComponent(Component):
         return NullAction()
 
 
-class NewPostComponent:
-    def __init__(self, renderer: "Renderer", top: int, bottom: int) -> None:
-        super().__init__(renderer, top, bottom)
-
-    def draw(self) -> None:
-        pass
-
-    def processInput(self, inputVal: bytes) -> Optional[Action]:
-        return None
-
-
 class OneLineInputBox:
     def __init__(
         self, renderer: "Renderer", text: str, length: int, *, obfuscate: bool = False
@@ -905,6 +898,44 @@ class OneLineInputBox:
             # components can act on them.
             return None
 
+        return None
+
+
+class NewPostComponent(Component):
+    def __init__(self, renderer: "Renderer", top: int, bottom: int) -> None:
+        super().__init__(renderer, top, bottom)
+
+        self.component = 0
+
+    def __summonBox(self) -> List[Tuple[str, List[ControlCodes]]]:
+        lines: List[Tuple[str, List[ControlCodes]]] = []
+
+        # First, create the top "Posting as" section.
+        lines.append(join([highlight("Posting as "), account("?", self.properties["username"], self.renderer.columns - 13)]))
+
+        return [
+            boxtop(self.renderer.columns),
+            *[boxmiddle(line, self.renderer.columns) for line in lines],
+            boxbottom(self.renderer.columns),
+        ]
+
+    def __moveCursor(self) -> None:
+        pass
+
+    def draw(self) -> None:
+        lines = self.__summonBox()
+        bounds = BoundingRectangle(
+            top=self.top,
+            bottom=self.bottom + 1,
+            left=1,
+            right=self.renderer.columns + 1,
+        )
+        display(self.terminal, lines, bounds)
+
+        # Now, put the cursor back.
+        self.__moveCursor()
+
+    def processInput(self, inputVal: bytes) -> Optional[Action]:
         return None
 
 
@@ -1320,6 +1351,12 @@ def spawnTimelineScreen(
 ) -> None:
     renderer.push(
         [TimelineComponent(renderer, top=1, bottom=renderer.rows, timeline=timeline)]
+    )
+
+
+def spawnPostScreen(renderer: Renderer) -> None:
+    renderer.push(
+        [NewPostComponent(renderer, top=1, bottom=renderer.rows)]
     )
 
 
