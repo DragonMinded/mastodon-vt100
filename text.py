@@ -541,6 +541,19 @@ def lpad(line: str, length: int) -> str:
     return (" " * amount) + line
 
 
+def center(line: str, length: int) -> str:
+    if len(line) == length:
+        return line
+    elif len(line) > length:
+        leftCut = (len(line) - length) // 2
+        line = line[leftCut:]
+        return line[:length]
+    else:
+        leftAdd = (length - len(line)) // 2
+        line = (" " * leftAdd) + line
+        return pad(line, length)
+
+
 def obfuscate(line: str) -> str:
     return "*" * len(line)
 

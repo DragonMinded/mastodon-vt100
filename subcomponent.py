@@ -25,6 +25,7 @@ from text import (
     wordwrap,
     pad,
     obfuscate,
+    center,
 )
 
 from typing import Any, Dict, List, Optional, Tuple
@@ -268,6 +269,122 @@ class Button(Focusable):
                 )
                 display(self.renderer.terminal, self.lines[1:2], bounds)
 
+            return NullAction()
+
+        return None
+
+
+class HorizontalSelect(Focusable):
+    def __init__(
+        self, renderer: "Renderer", choices: List[str], row: int, column: int, width: int, *, selected: Optional[str] = None, focused: bool = False
+    ):
+        self.renderer = renderer
+        self.choices = choices
+        self.row = row
+        self.column = column
+        self.width = width
+        self.focused = focused
+        self.__selected = 0
+        if selected:
+            for i, choice in enumerate(self.choices):
+                if choice == selected:
+                    self.__selected = i
+                    break
+
+    @property
+    def selected(self) -> str:
+        return self.choices[self.__selected]
+
+    @property
+    def lines(self) -> List[Tuple[str, List[ControlCodes]]]:
+        left = "<r>&lt;</r> " if self.focused else "&lt; "
+        right = " <r>&gt;</r>" if self.focused else " &gt;"
+        text = center(self.choices[self.__selected], self.width - 6)
+
+        return [
+            boxtop(self.width),
+            boxmiddle(highlight(f"{left}{text}{right}"), self.width),
+            boxbottom(self.width),
+        ]
+
+    def __moveCursor(self) -> None:
+        if self.focused:
+            text = center(self.choices[self.__selected], self.width - 6)
+            lPos = 0
+            while lPos < len(text) and text[lPos] == " ":
+                lPos += 1
+
+            self.renderer.terminal.moveCursor(self.row + 1, self.column + 3 + lPos)
+
+    def draw(self) -> None:
+        bounds = BoundingRectangle(
+            top=self.row, bottom=self.row + 3, left=self.column, right=self.column + self.width,
+        )
+        display(self.renderer.terminal, self.lines, bounds)
+        self.__moveCursor()
+
+    def processInput(self, inputVal: bytes) -> Optional[Action]:
+        oldFocus = self.focused
+        if inputVal == FOCUS_INPUT:
+            self.focused = True
+
+            if not oldFocus:
+                # Must draw focus bold.
+                bounds = BoundingRectangle(
+                    top=self.row + 1,
+                    bottom=self.row + 2,
+                    left=self.column,
+                    right=self.column + self.width,
+                )
+                display(self.renderer.terminal, self.lines[1:2], bounds)
+
+            # Move cursor to the right spot.
+            self.__moveCursor()
+            return NullAction()
+
+        elif inputVal == UNFOCUS_INPUT:
+            self.focused = False
+
+            if oldFocus:
+                # Must draw unfocus normal.
+                bounds = BoundingRectangle(
+                    top=self.row + 1,
+                    bottom=self.row + 2,
+                    left=self.column,
+                    right=self.column + self.width,
+                )
+                display(self.renderer.terminal, self.lines[1:2], bounds)
+
+            return NullAction()
+
+        elif inputVal == Terminal.LEFT:
+            if self.__selected > 0:
+                self.__selected -= 1
+                bounds = BoundingRectangle(
+                    top=self.row + 1,
+                    bottom=self.row + 2,
+                    left=self.column,
+                    right=self.column + self.width,
+                )
+                display(self.renderer.terminal, self.lines[1:2], bounds)
+
+                # Move cursor to the right spot.
+                self.__moveCursor()
+            return NullAction()
+
+        elif inputVal == Terminal.RIGHT:
+            if self.__selected < len(self.choices) - 1:
+                self.__selected += 1
+                bounds = BoundingRectangle(
+                    top=self.row + 1,
+                    bottom=self.row + 2,
+                    left=self.column,
+                    right=self.column + self.width,
+                )
+                display(self.renderer.terminal, self.lines[1:2], bounds)
+
+                # Move cursor to the right spot.
+                self.__moveCursor()
             return NullAction()
 
         return None

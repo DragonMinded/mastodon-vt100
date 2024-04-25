@@ -1,6 +1,6 @@
 from vtpy import Terminal
 
-from action import Action, NullAction, ExitAction, SwapScreenAction, FOCUS_INPUT
+from action import Action, NullAction, ExitAction, BackAction, SwapScreenAction, FOCUS_INPUT
 from client import Timeline, BadLoginError
 from clip import BoundingRectangle
 from drawhelpers import (
@@ -11,7 +11,7 @@ from drawhelpers import (
     account,
 )
 from renderer import Renderer
-from subcomponent import TimelinePost, FocusWrapper, Button, OneLineInputBox, MultiLineInputBox
+from subcomponent import TimelinePost, FocusWrapper, Button, HorizontalSelect, OneLineInputBox, MultiLineInputBox
 from text import ControlCodes, display, highlight, wordwrap, pad
 
 from typing import Any, Dict, List, Optional, Tuple
@@ -517,6 +517,10 @@ class NewPostComponent(Component):
 
         self.postBody = MultiLineInputBox(renderer, "", self.top + 2, 2, self.renderer.columns - 2, 10)
         self.cw = OneLineInputBox(renderer, "", self.top + 13, 2, self.renderer.columns - 2)
+        self.visibility = HorizontalSelect(renderer, ["public", "quiet public", "followers", "specific accounts"], self.top + 14, 19, 25)
+        self.post = Button(renderer, "Post", self.top + 17, 2)
+        self.discard = Button(renderer, "Discard", self.top + 17, 9)
+        self.focusWrapper = FocusWrapper([self.postBody, self.cw, self.visibility, self.post, self.discard], 0)
 
     def __summonBox(self) -> List[Tuple[str, List[ControlCodes]]]:
         lines: List[Tuple[str, List[ControlCodes]]] = []
@@ -532,21 +536,29 @@ class NewPostComponent(Component):
                 ]
             )
         )
+
+        # Now, add the CW text input.
         lines.extend(self.postBody.lines)
         lines.append(highlight("Optional CW:"))
         lines.append(self.cw.lines[0])
+
+        # Now, add the post visibility selection.
+        visibilityLines = self.visibility.lines
+        lines.append(join([highlight(" " * 17), visibilityLines[0]]))
+        lines.append(join([highlight("Post Visibility: "), visibilityLines[1]]))
+        lines.append(join([highlight(" " * 17), visibilityLines[2]]))
+
+        # Now, add the post and discard buttons.
+        postLines = self.post.lines
+        discardLines = self.discard.lines
+        for i in range(3):
+            lines.append(join([postLines[i], highlight(" "), discardLines[i]]))
 
         return [
             boxtop(self.renderer.columns),
             *[boxmiddle(line, self.renderer.columns) for line in lines],
             boxbottom(self.renderer.columns),
         ]
-
-    def __moveCursor(self) -> None:
-        if self.component == 0:
-            self.postBody.processInput(FOCUS_INPUT)
-        elif self.component == 1:
-            self.cw.processInput(FOCUS_INPUT)
 
     def draw(self) -> None:
         # First, draw the top bits.
@@ -564,11 +576,59 @@ class NewPostComponent(Component):
             self.terminal.moveCursor(line, 1)
             self.terminal.sendCommand(Terminal.CLEAR_LINE)
 
-        # Now, put the cursor back.
-        self.__moveCursor()
+        # Now, put the cursor in the right spot.
+        self.focusWrapper.focus()
 
     def processInput(self, inputVal: bytes) -> Optional[Action]:
-        return None
+        if inputVal == Terminal.UP:
+            if self.focusWrapper.component == 0:
+                # Cursor navigation.
+                return self.focusWrapper.processInput(inputVal)
+            else:
+                # Go to previous component.
+                self.focusWrapper.previous()
+
+                return NullAction()
+        elif inputVal == Terminal.DOWN:
+            if self.focusWrapper.component == 0:
+                # Cursor navigation.
+                return self.focusWrapper.processInput(inputVal)
+            else:
+                # Go to next component.
+                self.focusWrapper.next()
+
+                return NullAction()
+
+        elif inputVal in {Terminal.LEFT, Terminal.RIGHT}:
+            # Pass on to components.
+            return self.focusWrapper.processInput(inputVal)
+
+        elif inputVal == b"\t":
+            # Go to next component.
+            self.focusWrapper.next(wrap=True)
+
+            return NullAction()
+
+        elif inputVal == b"\r":
+            # Ignore this.
+            return NullAction()
+
+        elif inputVal == b"\n":
+            # Client pressed enter.
+            if self.focusWrapper.component == 0:
+                self.postBody.processInput(inputVal)
+            if self.focusWrapper.component in {1, 2}:
+                self.focusWrapper.next()
+            elif self.focusWrapper.component == 3:
+                # Actually attempt to post.
+                pass
+            elif self.focusWrapper.component == 4:
+                # Client wants to discard their post.
+                return BackAction()
+
+            return NullAction()
+        else:
+            return self.focusWrapper.processInput(inputVal)
 
 
 class LoginComponent(Component):
@@ -727,8 +787,6 @@ class LoginComponent(Component):
             return NullAction()
         else:
             return self.focusWrapper.processInput(inputVal)
-
-        return None
 
 
 class ErrorComponent(Component):
