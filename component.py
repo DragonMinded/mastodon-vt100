@@ -531,7 +531,7 @@ class NewPostComponent(Component):
                 [
                     highlight("Posting as "),
                     account(
-                        self.properties["account"]["display_name"], self.properties["username"], self.renderer.columns - 13
+                        self.properties["account"]["display_name"], self.properties["account"]["username"], self.renderer.columns - 13
                     ),
                 ]
             )
