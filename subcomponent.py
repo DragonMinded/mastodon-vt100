@@ -619,6 +619,23 @@ class MultiLineInputBox(Focusable):
             return NullAction()
 
         elif inputVal in {Terminal.BACKSPACE, Terminal.DELETE}:
+            if self.text:
+                # Just subtract from input.
+                if self.cursor == len(text):
+                    # Erasing at the end of the text.
+                    self.text = self.text[:-1]
+                    self.cursor -= 1
+
+                elif self.cursor == 0:
+                    # Erasing at the beginning, do nothing.
+                    pass
+
+                else:
+                    # Erasing in the middle of the text.
+                    spot = positions[self.cursor - 1]
+                    self.text = self.text[:spot] + self.text[(spot + 1) :]
+                    self.cursor -= 1
+
             handled = True
 
         else:
@@ -683,7 +700,7 @@ class MultiLineInputBox(Focusable):
 
         if oldLineLength != newLineLength:
             # Need to redraw the last lines.
-            for i in range(oldLineLength, newLineLength):
+            for i in range(min(oldLineLength, newLineLength), max(oldLineLength, newLineLength)):
                 # We need to draw this line.
                 bounds = BoundingRectangle(
                     top=self.row + i, bottom=self.row + i + 1, left=self.column, right=self.column + self.width
