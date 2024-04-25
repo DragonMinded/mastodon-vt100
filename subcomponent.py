@@ -506,7 +506,7 @@ class MultiLineInputBox(Focusable):
     def lines(self) -> List[Tuple[str, List[ControlCodes]]]:
         # First, word wrap to put the text in the right spot.
         code = ControlCodes(reverse=True)
-        lines = wordwrap(self.text, [code] * len(self.text), self.width)
+        lines = wordwrap(self.text, [code] * len(self.text), self.width - 1)
         lines = lines[:self.height]
 
         # Now, make sure any unfilled lines are drawn.
@@ -527,12 +527,14 @@ class MultiLineInputBox(Focusable):
 
     def __moveCursor(self) -> None:
         # Calculate where the cursor actually is.
-        lines = wordwrap(self.text, self.text, self.width)
-        text = "\n".join(t for t, _ in lines)
+        text, _, positions = self.__calcTextAndPositions()
 
         row = self.row
         column = self.column
-        for i in range(self.cursor):
+        for i in range(len(positions)):
+            if positions[i] >= self.cursor:
+                break
+
             if text[i] == "\n":
                 row += 1
                 column = self.column
@@ -548,9 +550,141 @@ class MultiLineInputBox(Focusable):
         display(self.renderer.terminal, self.lines, bounds)
         self.__moveCursor()
 
+    def __calcTextAndPositions(self) -> Tuple[str, List[str], List[int]]:
+        # We need to know what changed so we can redraw if necessary.
+        linesAndCodes = wordwrap(self.text, [i for i in range(len(self.text))], self.width - 1, strip_trailing_newlines=False)
+        lines = [line for line, _ in linesAndCodes]
+        codes = [code for _, code in linesAndCodes]
+
+        # Calculate actual displayed text and its length.
+        text = "\n".join(lines)
+
+        # Calculate actual text position given cursor position
+        positions: List[int] = []
+        for codeblock in codes:
+            if positions:
+                handled = False
+
+                if codeblock:
+                    # This is probably a space that caused us to wrap.
+                    if codeblock[0] - positions[-1] >= 2 and self.text[positions[-1] + 1] == " ":
+                        positions.append(positions[-1] + 1)
+                        handled = True
+
+                if not handled:
+                    positions.append(-1)
+            positions.extend(codeblock)
+
+        # Account for trailing whitespace.
+        if self.text:
+            while positions[-1] < len(self.text):
+                positions.append(positions[-1] + 1)
+        while len(text) < len(positions):
+            text += " "
+
+        return text, lines, positions
+
     def processInput(self, inputVal: bytes) -> Optional[Action]:
-        if inputVal == FOCUS_INPUT:
+        # First, grab our cursor positions.
+        text, lines, positions = self.__calcTextAndPositions()
+
+        # Keep track of whether we need to compute redraw or not.
+        handled = False
+
+        if inputVal == Terminal.LEFT:
+            if self.cursor > 0:
+                self.cursor -= 1
+                self.__moveCursor()
+
+            return NullAction()
+
+        elif inputVal == Terminal.RIGHT:
+            if self.cursor < len(text):
+                self.cursor += 1
+                self.__moveCursor()
+
+            return NullAction()
+
+        elif inputVal == FOCUS_INPUT:
             self.__moveCursor()
             return NullAction()
 
-        return None
+        elif inputVal in {Terminal.BACKSPACE, Terminal.DELETE}:
+            handled = True
+
+        else:
+            # If we got some unprintable character, ignore it.
+            inputVal = bytes(v for v in inputVal if (v == 0x0A or (v >= 0x20 and v < 0x80)))
+            if inputVal:
+                # Just add to input.
+                char = inputVal.decode("ascii")
+
+                if self.cursor == len(text):
+                    # Just appending to the input.
+                    self.text += char
+                    self.cursor += 1
+                else:
+                    # Adding to mid-input.
+                    spot = positions[self.cursor]
+                    if spot >= 0:
+                        # Adding to a normal spot.
+                        self.text = self.text[:spot] + char + self.text[spot:]
+                        self.cursor += 1
+                    else:
+                        # Adding to a word-wrapped spot.
+                        print(f"Cursor at position {self.cursor} adding to wrap spot.")
+
+                handled = True
+
+        if not handled:
+            # For control characters, don't claim we did anything with them, so parent
+            # components can act on them.
+            return None
+
+        # Need to calculate the new lines, and display ones that changed.
+        newLinesAndCodes = wordwrap(self.text, self.text, self.width - 1, strip_trailing_newlines=False)
+        newLines = [line for line, _ in newLinesAndCodes]
+        oldLineLength = len(lines)
+        newLineLength = len(newLines)
+
+        drawableLines = self.lines
+        for i in range(min(oldLineLength, newLineLength)):
+            if lines[i] != newLines[i]:
+                # We need to draw this line, but possibly not the whole line.
+                firstDiff = -1
+                lastDiff = -1
+                oldLength = len(lines[i])
+                newLength = len(newLines[i])
+
+                for j in range(min(oldLength, newLength)):
+                    if lines[i][j] != newLines[i][j]:
+                        if firstDiff == -1:
+                            firstDiff = j
+                        lastDiff = j
+                if oldLength != newLength:
+                    lastDiff = max(oldLength, newLength)
+                if firstDiff == -1:
+                    firstDiff = min(oldLength, newLength)
+
+                # Only draw what we need to on the screen, being as minimal as possible for faster refresh.
+                bounds = BoundingRectangle(
+                    top=self.row + i, bottom=self.row + i + 1, left=self.column + firstDiff, right=self.column + lastDiff,
+                )
+                drawableLine, drawableCodes = drawableLines[i]
+                drawableLine = drawableLine[firstDiff:]
+                drawableCodes = drawableCodes[firstDiff:]
+                display(self.renderer.terminal, [(drawableLine, drawableCodes)], bounds)
+
+        if oldLineLength != newLineLength:
+            # Need to redraw the last lines.
+            for i in range(oldLineLength, newLineLength):
+                # We need to draw this line.
+                bounds = BoundingRectangle(
+                    top=self.row + i, bottom=self.row + i + 1, left=self.column, right=self.column + self.width
+                )
+                display(self.renderer.terminal, drawableLines[i:(i + 1)], bounds)
+
+        # Now, stick the cursor back.
+        self.__moveCursor()
+
+        return NullAction()
