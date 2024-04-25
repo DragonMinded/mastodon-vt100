@@ -48,7 +48,7 @@ TObj = TypeVar("TObj", bound=object)
 
 
 def wordwrap(
-    text: str, meta: Sequence[TObj], width: int
+    text: str, meta: Sequence[TObj], width: int, *, strip_trailing_newlines: bool = True
 ) -> List[Tuple[str, Sequence[TObj]]]:
     """
     Given a text string and a maximum allowed width, word-wraps that text by
@@ -72,6 +72,10 @@ def wordwrap(
     # We don't handle non-unix line endings, so convert them.
     text = text.replace("\r\n", "\n")
     text = text.replace("\r", "\n")
+
+    # Hack to support trailing newlines properly.
+    if text and text[-1] == "\n":
+        text += "\x08"
 
     # First, go through and find any potential wrap points.
     wrapPoints: List[int] = []
@@ -170,13 +174,13 @@ def wordwrap(
             # multiple newlines.
             wrapPoints = [x - width for x in wrapPoints if (x - width) >= 0]
 
-    # Finally, get rid of leading and trailing whitespace.
+    # Finally, get rid of trailing whitespace.
     def stripSpace(line: Tuple[str, Sequence[TObj]]) -> Tuple[str, Sequence[TObj]]:
         text, meta = line
 
-        while text and text[0] in {" "}:
-            text = text[1:]
-            meta = meta[1:]
+        # Unhack the trailing newline hack.
+        if text == "\x08":
+            return (text[:0], meta[:0])
 
         while text and text[-1] in {" "}:
             text = text[:-1]
@@ -184,7 +188,11 @@ def wordwrap(
 
         return (text, meta)
 
-    return [stripSpace(line) for line in outLines]
+    outLines = [stripSpace(line) for line in outLines]
+    if strip_trailing_newlines:
+        while outLines and (not outLines[-1][0]):
+            outLines = outLines[:-1]
+    return outLines
 
 
 def __split_formatted_string(string: str) -> List[str]:
@@ -566,20 +574,26 @@ if __name__ == "__main__":
         width: int,
         expectedText: List[str],
         expectedMeta: List[Sequence[object]],
+        *,
+        strip_trailing_newlines: bool = True
     ) -> None:
-        output = wordwrap(text, meta, width)
+        output = wordwrap(text, meta, width, strip_trailing_newlines=strip_trailing_newlines)
         actualText = [x[0] for x in output]
         actualMeta = [x[1] for x in output]
 
         assert (
             actualText == expectedText
-        ), f"Expected {expectedText} but got {actualText}"
+        ), f"Expected text {expectedText} but got text {actualText}"
         assert (
             actualMeta == expectedMeta
-        ), f"Expected {expectedMeta} but got {actualMeta}"
+        ), f"Expected meta {expectedMeta} but got meta {actualMeta}"
 
     # Empty.
     verify("", "", 15, [""], [""])
+
+    # Leading space respect, trailing space strip.
+    verify("  test", "123456", 15, ["  test"], ["123456"])
+    verify("test  ", "123456", 15, ["test"], ["1234"])
 
     # Fits within space.
     verify("12345", "abcde", 15, ["12345"], ["abcde"])
@@ -587,6 +601,10 @@ if __name__ == "__main__":
     # Handles newlines explicitly.
     verify("123\n45", "abc de", 15, ["123", "45"], ["abc", "de"])
     verify("123\n\n45", "abc  de", 15, ["123", "", "45"], ["abc", "", "de"])
+
+    # Handles leading/trailing space with newlines.
+    verify("  test\ntest  ", "123456 123456", 15, ["  test", "test"], ["123456", "1234"])
+    verify("test  \n  test", "123456 123456", 15, ["test", "  test"], ["1234", "123456"])
 
     # Wraps in expected spot.
     verify("123 4567 890", "abc defg hij", 10, ["123 4567", "890"], ["abc defg", "hij"])
@@ -635,6 +653,10 @@ if __name__ == "__main__":
         ["abcdef", "g hij", "kl"],
         ["123456", "7 123", "45"],
     )
+
+    # Handles multi newlines and trailing newlines properly.
+    verify("a\nb\n\nc\n", "1 2  3 ", 64, ["a", "b", "", "c", ""], ["1", "2", "", "3", ""], strip_trailing_newlines=False)
+    verify("a\nb\n\nc\n", "1 2  3 ", 64, ["a", "b", "", "c"], ["1", "2", "", "3"], strip_trailing_newlines=True)
 
     # Hey we did it!
     print("Passed")
