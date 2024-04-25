@@ -566,19 +566,28 @@ class MultiLineInputBox(Focusable):
                 handled = False
 
                 if codeblock:
-                    # This is probably a space that caused us to wrap.
-                    if codeblock[0] - positions[-1] >= 2 and self.text[positions[-1] + 1] == " ":
+                    # This is a space or user-entered newline that caused us to wrap.
+                    if codeblock[0] - positions[-1] >= 2 and self.text[positions[-1] + 1] in {" ", "\n"}:
+                        positions.append(positions[-1] + 1)
+                        handled = True
+
+                else:
+                    # This might be a user-entered newline that caused us to wrap.
+                    if self.text[positions[-1] + 1] == "\n":
                         positions.append(positions[-1] + 1)
                         handled = True
 
                 if not handled:
-                    positions.append(-1)
+                    raise Exception("Logic error, unknown state!")
+
             positions.extend(codeblock)
 
-        # Account for trailing whitespace.
+        # Account for trailing whitespace and newlines.
         if self.text:
             while positions[-1] < len(self.text):
                 positions.append(positions[-1] + 1)
+
+        # Account for trimmed whitespace.
         while len(text) < len(positions):
             text += " "
 
@@ -599,7 +608,7 @@ class MultiLineInputBox(Focusable):
             return NullAction()
 
         elif inputVal == Terminal.RIGHT:
-            if self.cursor < len(text):
+            if self.cursor < (len(text) - 1):
                 self.cursor += 1
                 self.__moveCursor()
 
@@ -626,13 +635,10 @@ class MultiLineInputBox(Focusable):
                 else:
                     # Adding to mid-input.
                     spot = positions[self.cursor]
-                    if spot >= 0:
-                        # Adding to a normal spot.
-                        self.text = self.text[:spot] + char + self.text[spot:]
-                        self.cursor += 1
-                    else:
-                        # Adding to a word-wrapped spot.
-                        print(f"Cursor at position {self.cursor} adding to wrap spot.")
+
+                    # Adding to a normal spot.
+                    self.text = self.text[:spot] + char + self.text[spot:]
+                    self.cursor += 1
 
                 handled = True
 
