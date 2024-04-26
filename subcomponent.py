@@ -174,8 +174,7 @@ class TimelinePost:
 
 
 class Focusable(ABC):
-    def processInput(self, inputVal: bytes) -> Optional[Action]:
-        ...
+    def processInput(self, inputVal: bytes) -> Optional[Action]: ...
 
 
 class FocusWrapper:
@@ -212,7 +211,13 @@ class FocusWrapper:
 
 class Button(Focusable):
     def __init__(
-        self, renderer: "Renderer", caption: str, row: int, column: int, *, focused: bool = False
+        self,
+        renderer: "Renderer",
+        caption: str,
+        row: int,
+        column: int,
+        *,
+        focused: bool = False,
     ):
         self.renderer = renderer
         self.caption = caption
@@ -225,13 +230,19 @@ class Button(Focusable):
         width = len(self.caption) + 2
         return [
             boxtop(width),
-            boxmiddle(highlight(f"<b>{self.caption}</b>" if self.focused else self.caption), width),
+            boxmiddle(
+                highlight(f"<b>{self.caption}</b>" if self.focused else self.caption),
+                width,
+            ),
             boxbottom(width),
         ]
 
     def draw(self) -> None:
         bounds = BoundingRectangle(
-            top=self.row, bottom=self.row + 3, left=self.column, right=self.column + len(self.caption) + 2,
+            top=self.row,
+            bottom=self.row + 3,
+            left=self.column,
+            right=self.column + len(self.caption) + 2,
         )
         display(self.renderer.terminal, self.lines, bounds)
         if self.focused:
@@ -248,7 +259,7 @@ class Button(Focusable):
                     top=self.row + 1,
                     bottom=self.row + 2,
                     left=self.column,
-                    right=self.column + len(self.caption) + 2
+                    right=self.column + len(self.caption) + 2,
                 )
                 display(self.renderer.terminal, self.lines[1:2], bounds)
 
@@ -265,7 +276,7 @@ class Button(Focusable):
                     top=self.row + 1,
                     bottom=self.row + 2,
                     left=self.column,
-                    right=self.column + len(self.caption) + 2
+                    right=self.column + len(self.caption) + 2,
                 )
                 display(self.renderer.terminal, self.lines[1:2], bounds)
 
@@ -276,7 +287,15 @@ class Button(Focusable):
 
 class HorizontalSelect(Focusable):
     def __init__(
-        self, renderer: "Renderer", choices: List[str], row: int, column: int, width: int, *, selected: Optional[str] = None, focused: bool = False
+        self,
+        renderer: "Renderer",
+        choices: List[str],
+        row: int,
+        column: int,
+        width: int,
+        *,
+        selected: Optional[str] = None,
+        focused: bool = False,
     ):
         self.renderer = renderer
         self.choices = choices
@@ -318,7 +337,10 @@ class HorizontalSelect(Focusable):
 
     def draw(self) -> None:
         bounds = BoundingRectangle(
-            top=self.row, bottom=self.row + 3, left=self.column, right=self.column + self.width,
+            top=self.row,
+            bottom=self.row + 3,
+            left=self.column,
+            right=self.column + self.width,
         )
         display(self.renderer.terminal, self.lines, bounds)
         self.__moveCursor()
@@ -392,7 +414,14 @@ class HorizontalSelect(Focusable):
 
 class OneLineInputBox(Focusable):
     def __init__(
-        self, renderer: "Renderer", text: str, row: int, column: int, length: int, *, obfuscate: bool = False
+        self,
+        renderer: "Renderer",
+        text: str,
+        row: int,
+        column: int,
+        length: int,
+        *,
+        obfuscate: bool = False,
     ) -> None:
         self.renderer = renderer
         self.text = text[:length]
@@ -411,7 +440,10 @@ class OneLineInputBox(Focusable):
 
     def draw(self) -> None:
         bounds = BoundingRectangle(
-            top=self.row, bottom=self.row + 1, left=self.column, right=self.column + self.length
+            top=self.row,
+            bottom=self.row + 1,
+            left=self.column,
+            right=self.column + self.length,
         )
         display(self.renderer.terminal, self.lines, bounds)
         self.renderer.terminal.moveCursor(self.row, self.column + self.cursor)
@@ -491,7 +523,13 @@ class OneLineInputBox(Focusable):
 
 class MultiLineInputBox(Focusable):
     def __init__(
-        self, renderer: "Renderer", text: str, row: int, column: int, width: int, height: int,
+        self,
+        renderer: "Renderer",
+        text: str,
+        row: int,
+        column: int,
+        width: int,
+        height: int,
     ) -> None:
         self.renderer = renderer
         self.text = text
@@ -506,8 +544,13 @@ class MultiLineInputBox(Focusable):
     def lines(self) -> List[Tuple[str, List[ControlCodes]]]:
         # First, word wrap to put the text in the right spot.
         code = ControlCodes(reverse=True)
-        lines = wordwrap(self.text, [code] * len(self.text), self.width - 1)
-        lines = lines[:self.height]
+        lines = wordwrap(
+            self.text,
+            [code] * len(self.text),
+            self.width - 1,
+            strip_trailing_spaces=False,
+        )
+        lines = lines[: self.height]
 
         # Now, make sure any unfilled lines are drawn.
         while len(lines) < self.height:
@@ -532,7 +575,7 @@ class MultiLineInputBox(Focusable):
         row = self.row
         column = self.column
         for i in range(len(positions)):
-            if positions[i] >= self.cursor:
+            if positions[i] == self.cursor:
                 break
 
             if text[i] == "\n":
@@ -540,19 +583,27 @@ class MultiLineInputBox(Focusable):
                 column = self.column
             else:
                 column += 1
-
         self.renderer.terminal.moveCursor(row, column)
 
     def draw(self) -> None:
         bounds = BoundingRectangle(
-            top=self.row, bottom=self.row + self.height, left=self.column, right=self.column + self.width
+            top=self.row,
+            bottom=self.row + self.height,
+            left=self.column,
+            right=self.column + self.width,
         )
         display(self.renderer.terminal, self.lines, bounds)
         self.__moveCursor()
 
     def __calcTextAndPositions(self) -> Tuple[str, List[str], List[int]]:
         # We need to know what changed so we can redraw if necessary.
-        linesAndCodes = wordwrap(self.text, [i for i in range(len(self.text))], self.width - 1, strip_trailing_newlines=False)
+        linesAndCodes = wordwrap(
+            self.text,
+            [i for i in range(len(self.text))],
+            self.width - 1,
+            strip_trailing_spaces=False,
+            strip_trailing_newlines=False,
+        )
         lines = [line for line, _ in linesAndCodes]
         codes = [code for _, code in linesAndCodes]
 
@@ -567,13 +618,20 @@ class MultiLineInputBox(Focusable):
 
                 if codeblock:
                     # This is a space or user-entered newline that caused us to wrap.
-                    if codeblock[0] - positions[-1] >= 2 and self.text[positions[-1] + 1] in {" ", "\n"}:
+                    if codeblock[0] - positions[-1] >= 2 and self.text[
+                        positions[-1] + 1
+                    ] in {" ", "\n"}:
                         positions.append(positions[-1] + 1)
+                        handled = True
+
+                    # This is a word that was wrapped mid-line.
+                    elif codeblock[0] - positions[-1] == 1:
+                        positions.append(-1)
                         handled = True
 
                 else:
                     # This might be a user-entered newline that caused us to wrap.
-                    if self.text[positions[-1] + 1] == "\n":
+                    if self.text[positions[-1] + 1] in {" ", "\n"}:
                         positions.append(positions[-1] + 1)
                         handled = True
 
@@ -584,12 +642,17 @@ class MultiLineInputBox(Focusable):
 
         # Account for trailing whitespace and newlines.
         if self.text:
+            if positions[-1] == -1:
+                raise Exception("Logic error, unknown state!")
             while positions[-1] < len(self.text):
                 positions.append(positions[-1] + 1)
+        else:
+            if positions:
+                raise Exception("Logic error, positions should be empty!")
+            positions.append(0)
 
-        # Account for trimmed whitespace.
-        while len(text) < len(positions):
-            text += " "
+        if (len(text) + 1) != len(positions):
+            raise Exception("Logic error, inconsistent position calculation!")
 
         return text, lines, positions
 
@@ -599,17 +662,28 @@ class MultiLineInputBox(Focusable):
 
         # Keep track of whether we need to compute redraw or not.
         handled = False
+        cursor = 0
+        for i, pos in enumerate(positions):
+            if pos == self.cursor:
+                cursor = i
+                break
 
         if inputVal == Terminal.LEFT:
             if self.cursor > 0:
                 self.cursor -= 1
+                while self.cursor > 0 and positions[self.cursor] == -1:
+                    self.cursor -= 1
+
                 self.__moveCursor()
 
             return NullAction()
 
         elif inputVal == Terminal.RIGHT:
-            if self.cursor < (len(text) - 1):
+            if self.cursor < len(text):
                 self.cursor += 1
+                while self.cursor < (len(text) - 1) and positions[self.cursor] == -1:
+                    self.cursor += 1
+
                 self.__moveCursor()
 
             return NullAction()
@@ -621,18 +695,18 @@ class MultiLineInputBox(Focusable):
         elif inputVal in {Terminal.BACKSPACE, Terminal.DELETE}:
             if self.text:
                 # Just subtract from input.
-                if self.cursor == len(text):
+                if cursor == len(text):
                     # Erasing at the end of the text.
                     self.text = self.text[:-1]
                     self.cursor -= 1
 
-                elif self.cursor == 0:
+                elif cursor == 0:
                     # Erasing at the beginning, do nothing.
                     pass
 
                 else:
                     # Erasing in the middle of the text.
-                    spot = positions[self.cursor - 1]
+                    spot = positions[cursor - 1]
                     self.text = self.text[:spot] + self.text[(spot + 1) :]
                     self.cursor -= 1
 
@@ -640,18 +714,20 @@ class MultiLineInputBox(Focusable):
 
         else:
             # If we got some unprintable character, ignore it.
-            inputVal = bytes(v for v in inputVal if (v == 0x0A or (v >= 0x20 and v < 0x80)))
+            inputVal = bytes(
+                v for v in inputVal if (v == 0x0A or (v >= 0x20 and v < 0x80))
+            )
             if inputVal:
                 # Just add to input.
                 char = inputVal.decode("ascii")
 
-                if self.cursor == len(text):
+                if cursor == len(text):
                     # Just appending to the input.
                     self.text += char
                     self.cursor += 1
                 else:
                     # Adding to mid-input.
-                    spot = positions[self.cursor]
+                    spot = positions[cursor]
 
                     # Adding to a normal spot.
                     self.text = self.text[:spot] + char + self.text[spot:]
@@ -665,7 +741,13 @@ class MultiLineInputBox(Focusable):
             return None
 
         # Need to calculate the new lines, and display ones that changed.
-        newLinesAndCodes = wordwrap(self.text, self.text, self.width - 1, strip_trailing_newlines=False)
+        newLinesAndCodes = wordwrap(
+            self.text,
+            self.text,
+            self.width - 1,
+            strip_trailing_spaces=False,
+            strip_trailing_newlines=False,
+        )
         newLines = [line for line, _ in newLinesAndCodes]
         oldLineLength = len(lines)
         newLineLength = len(newLines)
@@ -691,7 +773,10 @@ class MultiLineInputBox(Focusable):
 
                 # Only draw what we need to on the screen, being as minimal as possible for faster refresh.
                 bounds = BoundingRectangle(
-                    top=self.row + i, bottom=self.row + i + 1, left=self.column + firstDiff, right=self.column + lastDiff,
+                    top=self.row + i,
+                    bottom=self.row + i + 1,
+                    left=self.column + firstDiff,
+                    right=self.column + lastDiff,
                 )
                 drawableLine, drawableCodes = drawableLines[i]
                 drawableLine = drawableLine[firstDiff:]
@@ -700,12 +785,17 @@ class MultiLineInputBox(Focusable):
 
         if oldLineLength != newLineLength:
             # Need to redraw the last lines.
-            for i in range(min(oldLineLength, newLineLength), max(oldLineLength, newLineLength)):
+            for i in range(
+                min(oldLineLength, newLineLength), max(oldLineLength, newLineLength)
+            ):
                 # We need to draw this line.
                 bounds = BoundingRectangle(
-                    top=self.row + i, bottom=self.row + i + 1, left=self.column, right=self.column + self.width
+                    top=self.row + i,
+                    bottom=self.row + i + 1,
+                    left=self.column,
+                    right=self.column + self.width,
                 )
-                display(self.renderer.terminal, drawableLines[i:(i + 1)], bounds)
+                display(self.renderer.terminal, drawableLines[i : (i + 1)], bounds)
 
         # Now, stick the cursor back.
         self.__moveCursor()
