@@ -159,26 +159,39 @@ def wordwrap(
                         meta = []
                         wrapPoints = []
                 else:
-                    # Find the first non-space to wrap
-                    spot = len(text)
-                    for i in range(pos + 1, len(text)):
-                        if text[i] not in {" ", "\t"}:
-                            spot = i
-                            break
+                    # In one case, we strip trailing space if we're replacing it with a newline.
+                    if pos == width and text[pos - 1] not in {" ", "\t"}:
+                        outLines.append((text[:pos], meta[:pos]))
 
-                    # If the spot we should wrap to is larger than the width, when we should
-                    # insert an arbitrary wrap point at the width
-                    if spot > width:
-                        spot = width
+                        spot = pos + 1
+                        text = text[spot:]
+                        meta = meta[spot:]
 
-                    outLines.append((text[:spot], meta[:spot]))
-                    text = text[spot:]
-                    meta = meta[spot:]
+                        # Filter out irrelevant wrap points and fix up their locations. We keep
+                        # zero-location word-wrap points after this because text could include
+                        # multiple newlines.
+                        wrapPoints = [x - spot for x in wrapPoints if (x - spot) >= 0]
+                    else:
+                        # Find the first non-space to wrap
+                        spot = len(text)
+                        for i in range(pos + 1, len(text)):
+                            if text[i] not in {" ", "\t"}:
+                                spot = i
+                                break
 
-                    # Filter out irrelevant wrap points and fix up their locations. We keep
-                    # zero-location word-wrap points after this because text could include
-                    # multiple newlines.
-                    wrapPoints = [x - spot for x in wrapPoints if (x - spot) >= 0]
+                        # If the spot we should wrap to is larger than the width, when we should
+                        # insert an arbitrary wrap point at the width
+                        if spot > width:
+                            spot = width
+
+                        outLines.append((text[:spot], meta[:spot]))
+                        text = text[spot:]
+                        meta = meta[spot:]
+
+                        # Filter out irrelevant wrap points and fix up their locations. We keep
+                        # zero-location word-wrap points after this because text could include
+                        # multiple newlines.
+                        wrapPoints = [x - spot for x in wrapPoints if (x - spot) >= 0]
             else:
                 # We're wrapping mid-word, probably at a punctuation point, so we keep
                 # everything on both sides.
@@ -719,11 +732,27 @@ if __name__ == "__main__":
         "a  \n b  ", "1   23  ", 5, ["a", " b"], ["1", "23"], strip_trailing_spaces=True
     )
     verify(
+        "abcde f ",
+        "12345678",
+        5,
+        ["abcde", "f"],
+        ["12345", "7"],
+        strip_trailing_spaces=True,
+    )
+    verify(
         "a     b  ",
         "123456789",
         5,
         ["a    ", " b  "],
         ["12345", "6789"],
+        strip_trailing_spaces=False,
+    )
+    verify(
+        "abcde f ",
+        "12345678",
+        5,
+        ["abcde", "f "],
+        ["12345", "78"],
         strip_trailing_spaces=False,
     )
 
