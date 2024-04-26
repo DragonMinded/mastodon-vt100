@@ -1,6 +1,13 @@
 from vtpy import Terminal
 
-from action import Action, NullAction, ExitAction, BackAction, SwapScreenAction, FOCUS_INPUT
+from action import (
+    Action,
+    NullAction,
+    ExitAction,
+    BackAction,
+    SwapScreenAction,
+    FOCUS_INPUT,
+)
 from client import Timeline, BadLoginError
 from clip import BoundingRectangle
 from drawhelpers import (
@@ -11,7 +18,14 @@ from drawhelpers import (
     account,
 )
 from renderer import Renderer
-from subcomponent import TimelinePost, FocusWrapper, Button, HorizontalSelect, OneLineInputBox, MultiLineInputBox
+from subcomponent import (
+    TimelinePost,
+    FocusWrapper,
+    Button,
+    HorizontalSelect,
+    OneLineInputBox,
+    MultiLineInputBox,
+)
 from text import ControlCodes, display, highlight, wordwrap, pad
 
 from typing import Any, Dict, List, Optional, Tuple
@@ -515,12 +529,24 @@ class NewPostComponent(Component):
 
         self.component = 0
 
-        self.postBody = MultiLineInputBox(renderer, "", self.top + 2, 2, self.renderer.columns - 2, 10)
-        self.cw = OneLineInputBox(renderer, "", self.top + 13, 2, self.renderer.columns - 2)
-        self.visibility = HorizontalSelect(renderer, ["public", "quiet public", "followers", "specific accounts"], self.top + 14, 19, 25)
+        self.postBody = MultiLineInputBox(
+            renderer, "", self.top + 2, 2, self.renderer.columns - 2, 10
+        )
+        self.cw = OneLineInputBox(
+            renderer, "", self.top + 13, 2, self.renderer.columns - 2
+        )
+        self.visibility = HorizontalSelect(
+            renderer,
+            ["public", "quiet public", "followers", "specific accounts"],
+            self.top + 14,
+            19,
+            25,
+        )
         self.post = Button(renderer, "Post", self.top + 17, 2)
         self.discard = Button(renderer, "Discard", self.top + 17, 9)
-        self.focusWrapper = FocusWrapper([self.postBody, self.cw, self.visibility, self.post, self.discard], 0)
+        self.focusWrapper = FocusWrapper(
+            [self.postBody, self.cw, self.visibility, self.post, self.discard], 0
+        )
 
     def __summonBox(self) -> List[Tuple[str, List[ControlCodes]]]:
         lines: List[Tuple[str, List[ControlCodes]]] = []
@@ -531,7 +557,9 @@ class NewPostComponent(Component):
                 [
                     highlight("Posting as "),
                     account(
-                        self.properties["account"]["display_name"], self.properties["account"]["username"], self.renderer.columns - 13
+                        self.properties["account"]["display_name"],
+                        self.properties["account"]["username"],
+                        self.renderer.columns - 13,
                     ),
                 ]
             )
@@ -651,12 +679,30 @@ class LoginComponent(Component):
 
         # Set up for what input we're handling.
         self.properties["server"] = server
-        self.username = OneLineInputBox(renderer, username, (self.top - 1) + 7, self.left + 2, 36)
-        self.password = OneLineInputBox(renderer, password, (self.top - 1) + 10, self.left + 2, 36, obfuscate=True)
-        self.login = Button(renderer, "login", (self.top - 1) + 12, self.left + 2, focused=component == 2)
-        self.quit = Button(renderer, "quit", (self.top - 1) + 12, self.left + 32, focused=component == 3)
+        self.username = OneLineInputBox(
+            renderer, username, (self.top - 1) + 7, self.left + 2, 36
+        )
+        self.password = OneLineInputBox(
+            renderer, password, (self.top - 1) + 10, self.left + 2, 36, obfuscate=True
+        )
+        self.login = Button(
+            renderer,
+            "login",
+            (self.top - 1) + 12,
+            self.left + 2,
+            focused=component == 2,
+        )
+        self.quit = Button(
+            renderer,
+            "quit",
+            (self.top - 1) + 12,
+            self.left + 32,
+            focused=component == 3,
+        )
 
-        self.focusWrapper = FocusWrapper([self.username, self.password, self.login, self.quit], component)
+        self.focusWrapper = FocusWrapper(
+            [self.username, self.password, self.login, self.quit], component
+        )
 
     def __login(self) -> bool:
         # Attempt to log in.
@@ -806,7 +852,13 @@ class ErrorComponent(Component):
 
         text, codes = highlight(error)
         self.textbits = wordwrap(text, codes, 36)
-        self.quit = Button(renderer, "quit", self.top + 6 + len(self.textbits), self.left + 32, focused=True)
+        self.quit = Button(
+            renderer,
+            "quit",
+            self.top + 6 + len(self.textbits),
+            self.left + 32,
+            focused=True,
+        )
 
     def __summonBox(self) -> List[Tuple[str, List[ControlCodes]]]:
         # First, create the "quit" button.
