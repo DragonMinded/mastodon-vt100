@@ -48,7 +48,12 @@ TObj = TypeVar("TObj", bound=object)
 
 
 def wordwrap(
-    text: str, meta: Sequence[TObj], width: int, *, strip_trailing_newlines: bool = True
+    text: str,
+    meta: Sequence[TObj],
+    width: int,
+    *,
+    strip_trailing_spaces: bool = True,
+    strip_trailing_newlines: bool = True,
 ) -> List[Tuple[str, Sequence[TObj]]]:
     """
     Given a text string and a maximum allowed width, word-wraps that text by
@@ -128,18 +133,45 @@ def wordwrap(
             pos = relevantPoints[-1]
 
             if text[pos] in {" ", "\t"}:
-                # We don't include the space at the end of the line, or in the
-                # beginning of the next, so drop it.
-                outLines.append((text[:pos], meta[:pos]))
+                if strip_trailing_spaces:
+                    # We don't include the space at the end of the line, or in the
+                    # beginning of the next, so drop it.
+                    outLines.append((text[:pos], meta[:pos]))
 
-                # Find the first non-space to wrap
-                spot = -1
-                for i in range(pos + 1, len(text)):
-                    if text[i] not in {" ", "\t"}:
-                        spot = i
-                        break
+                    # Find the first non-space to wrap
+                    spot = -1
+                    for i in range(pos + 1, len(text)):
+                        if text[i] not in {" ", "\t"}:
+                            spot = i
+                            break
 
-                if spot >= 0:
+                    if spot >= 0:
+                        text = text[spot:]
+                        meta = meta[spot:]
+
+                        # Filter out irrelevant wrap points and fix up their locations. We keep
+                        # zero-location word-wrap points after this because text could include
+                        # multiple newlines.
+                        wrapPoints = [x - spot for x in wrapPoints if (x - spot) >= 0]
+                    else:
+                        # We hit the end of the text.
+                        text = ""
+                        meta = []
+                        wrapPoints = []
+                else:
+                    # Find the first non-space to wrap
+                    spot = len(text)
+                    for i in range(pos + 1, len(text)):
+                        if text[i] not in {" ", "\t"}:
+                            spot = i
+                            break
+
+                    # If the spot we should wrap to is larger than the width, when we should
+                    # insert an arbitrary wrap point at the width
+                    if spot > width:
+                        spot = width
+
+                    outLines.append((text[:spot], meta[:spot]))
                     text = text[spot:]
                     meta = meta[spot:]
 
@@ -147,11 +179,6 @@ def wordwrap(
                     # zero-location word-wrap points after this because text could include
                     # multiple newlines.
                     wrapPoints = [x - spot for x in wrapPoints if (x - spot) >= 0]
-                else:
-                    # We hit the end of the text.
-                    text = ""
-                    meta = []
-                    wrapPoints = []
             else:
                 # We're wrapping mid-word, probably at a punctuation point, so we keep
                 # everything on both sides.
@@ -182,9 +209,10 @@ def wordwrap(
         if text == "\x08":
             return (text[:0], meta[:0])
 
-        while text and text[-1] in {" "}:
-            text = text[:-1]
-            meta = meta[:-1]
+        if strip_trailing_spaces:
+            while text and text[-1] in {" "}:
+                text = text[:-1]
+                meta = meta[:-1]
 
         return (text, meta)
 
@@ -575,9 +603,16 @@ if __name__ == "__main__":
         expectedText: List[str],
         expectedMeta: List[Sequence[object]],
         *,
-        strip_trailing_newlines: bool = True
+        strip_trailing_newlines: bool = True,
+        strip_trailing_spaces: bool = True,
     ) -> None:
-        output = wordwrap(text, meta, width, strip_trailing_newlines=strip_trailing_newlines)
+        output = wordwrap(
+            text,
+            meta,
+            width,
+            strip_trailing_newlines=strip_trailing_newlines,
+            strip_trailing_spaces=strip_trailing_spaces,
+        )
         actualText = [x[0] for x in output]
         actualMeta = [x[1] for x in output]
 
@@ -603,8 +638,12 @@ if __name__ == "__main__":
     verify("123\n\n45", "abc  de", 15, ["123", "", "45"], ["abc", "", "de"])
 
     # Handles leading/trailing space with newlines.
-    verify("  test\ntest  ", "123456 123456", 15, ["  test", "test"], ["123456", "1234"])
-    verify("test  \n  test", "123456 123456", 15, ["test", "  test"], ["1234", "123456"])
+    verify(
+        "  test\ntest  ", "123456 123456", 15, ["  test", "test"], ["123456", "1234"]
+    )
+    verify(
+        "test  \n  test", "123456 123456", 15, ["test", "  test"], ["1234", "123456"]
+    )
 
     # Wraps in expected spot.
     verify("123 4567 890", "abc defg hij", 10, ["123 4567", "890"], ["abc defg", "hij"])
@@ -655,8 +694,38 @@ if __name__ == "__main__":
     )
 
     # Handles multi newlines and trailing newlines properly.
-    verify("a\nb\n\nc\n", "1 2  3 ", 64, ["a", "b", "", "c", ""], ["1", "2", "", "3", ""], strip_trailing_newlines=False)
-    verify("a\nb\n\nc\n", "1 2  3 ", 64, ["a", "b", "", "c"], ["1", "2", "", "3"], strip_trailing_newlines=True)
+    verify(
+        "a\nb\n\nc\n",
+        "1 2  3 ",
+        64,
+        ["a", "b", "", "c", ""],
+        ["1", "2", "", "3", ""],
+        strip_trailing_newlines=False,
+    )
+    verify(
+        "a\nb\n\nc\n",
+        "1 2  3 ",
+        64,
+        ["a", "b", "", "c"],
+        ["1", "2", "", "3"],
+        strip_trailing_newlines=True,
+    )
+
+    # Handles stripping trailing spaces properly.
+    verify(
+        "a     b  ", "1     2  ", 5, ["a", "b"], ["1", "2"], strip_trailing_spaces=True
+    )
+    verify(
+        "a  \n b  ", "1   23  ", 5, ["a", " b"], ["1", "23"], strip_trailing_spaces=True
+    )
+    verify(
+        "a     b  ",
+        "123456789",
+        5,
+        ["a    ", " b  "],
+        ["12345", "6789"],
+        strip_trailing_spaces=False,
+    )
 
     # Hey we did it!
     print("Passed")
