@@ -669,21 +669,23 @@ class MultiLineInputBox(Focusable):
                 break
 
         if inputVal == Terminal.LEFT:
-            if self.cursor > 0:
-                self.cursor -= 1
-                while self.cursor > 0 and positions[self.cursor] == -1:
-                    self.cursor -= 1
+            if cursor > 0:
+                cursor -= 1
+                while cursor > 0 and positions[cursor] == -1:
+                    cursor -= 1
 
+                self.cursor = positions[cursor]
                 self.__moveCursor()
 
             return NullAction()
 
         elif inputVal == Terminal.RIGHT:
-            if self.cursor < len(text):
-                self.cursor += 1
-                while self.cursor < (len(text) - 1) and positions[self.cursor] == -1:
-                    self.cursor += 1
+            if cursor < len(text):
+                cursor += 1
+                while cursor < len(text) and positions[cursor] == -1:
+                    cursor += 1
 
+                self.cursor = positions[cursor]
                 self.__moveCursor()
 
             return NullAction()
