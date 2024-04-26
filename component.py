@@ -8,7 +8,7 @@ from action import (
     SwapScreenAction,
     FOCUS_INPUT,
 )
-from client import Timeline, BadLoginError
+from client import Timeline, Visibility, BadLoginError
 from clip import BoundingRectangle
 from drawhelpers import (
     boxtop,
@@ -649,7 +649,31 @@ class NewPostComponent(Component):
                 self.focusWrapper.next()
             elif self.focusWrapper.component == 3:
                 # Actually attempt to post.
-                pass
+                status = self.postBody.text
+                if self.cw.text:
+                    cw = self.cw.text
+                else:
+                    cw = None
+
+                for text, visEnum in [
+                    ("public", Visibility.PUBLIC),
+                    ("quiet public", Visibility.UNLISTED),
+                    ("followers", Visibility.PRIVATE),
+                    ("specific accounts", Visibility.DIRECT),
+                ]:
+                    if text == self.visibility.selected:
+                        visibility = visEnum
+                        break
+                else:
+                    raise Exception("Logic error, couldn't map visibility!")
+
+                self.client.createPost(status, visibility, cw=cw)
+                self.renderer.status(
+                    "Posted new status, hit " r" to refresh timeline and see it!"
+                )
+
+                # Go back now, once post was successfully posted.
+                return BackAction()
             elif self.focusWrapper.component == 4:
                 # Client wants to discard their post.
                 return BackAction()

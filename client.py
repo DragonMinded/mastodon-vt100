@@ -10,6 +10,13 @@ class Timeline(Enum):
     HOME = auto()
 
 
+class Visibility(Enum):
+    PUBLIC = auto()
+    UNLISTED = auto()
+    PRIVATE = auto()
+    DIRECT = auto()
+
+
 class BadLoginError(Exception):
     pass
 
@@ -94,3 +101,24 @@ class Client:
             return cast(Dict[str, Any], self.__client.account(accountID))
         else:
             return cast(Dict[str, Any], self.__client.me())
+
+    def createPost(
+        self, status: str, visibility: Visibility, *, cw: Optional[str] = None
+    ) -> Dict[str, Any]:
+        self.__assert_valid()
+
+        if visibility == Visibility.PUBLIC:
+            visStr = "public"
+        elif visibility == Visibility.UNLISTED:
+            visStr = "unlisted"
+        elif visibility == Visibility.PRIVATE:
+            visStr = "private"
+        elif visibility == Visibility.DIRECT:
+            visStr = "direct"
+        else:
+            raise Exception("Unknown post visibility!")
+
+        return cast(
+            Dict[str, Any],
+            self.__client.status_post(status, visibility=visStr, spoiler_text=cw),
+        )
