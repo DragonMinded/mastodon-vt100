@@ -167,6 +167,12 @@ def wordwrap(
                         text = text[spot:]
                         meta = meta[spot:]
 
+                        if not text:
+                            # If we ran out of text, we need to represent the next line as empty
+                            # due to the aforementioned replacement with newline. If we're asked
+                            # to strip newlines this will just go away anyway.
+                            outLines.append((text[:0], meta[:0]))
+
                         # Filter out irrelevant wrap points and fix up their locations. We keep
                         # zero-location word-wrap points after this because text could include
                         # multiple newlines.
@@ -740,6 +746,14 @@ if __name__ == "__main__":
         strip_trailing_spaces=True,
     )
     verify(
+        "abcde ",
+        "123456",
+        5,
+        ["abcde"],
+        ["12345"],
+        strip_trailing_spaces=True,
+    )
+    verify(
         "a     b  ",
         "123456789",
         5,
@@ -754,6 +768,24 @@ if __name__ == "__main__":
         ["abcde", "f "],
         ["12345", "78"],
         strip_trailing_spaces=False,
+    )
+    verify(
+        "abcde ",
+        "123456",
+        5,
+        ["abcde"],
+        ["12345"],
+        strip_trailing_spaces=False,
+        strip_trailing_newlines=True,
+    )
+    verify(
+        "abcde ",
+        "123456",
+        5,
+        ["abcde", ""],
+        ["12345", ""],
+        strip_trailing_spaces=False,
+        strip_trailing_newlines=False,
     )
 
     # Hey we did it!
