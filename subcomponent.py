@@ -568,6 +568,25 @@ class MultiLineInputBox(Focusable):
 
         return output
 
+    def __calcCursorPositions(
+        self, text: str, positions: List[int]
+    ) -> List[Tuple[int, Tuple[int, int]]]:
+        row = self.row
+        column = self.column
+        cursorPositions: List[Tuple[int, Tuple[int, int]]] = []
+        for i, pos in enumerate(positions):
+            cursorPositions.append((pos, (row, column)))
+
+            if i == len(text):
+                break
+            if text[i] == "\n":
+                row += 1
+                column = self.column
+            else:
+                column += 1
+
+        return cursorPositions
+
     def __moveCursor(self) -> None:
         # Calculate where the cursor actually is.
         text, _, positions = self.__calcTextAndPositions()
@@ -686,6 +705,42 @@ class MultiLineInputBox(Focusable):
                     cursor += 1
 
                 self.cursor = positions[cursor]
+                self.__moveCursor()
+
+            return NullAction()
+
+        elif inputVal == Terminal.UP:
+            cursorPositions = self.__calcCursorPositions(text, positions)
+            _, (curRow, curColumn) = cursorPositions[cursor]
+
+            possiblePositions = [
+                c
+                for c in cursorPositions
+                if (c[1][0] == curRow - 1) and (c[1][1] <= curColumn)
+            ]
+            if possiblePositions:
+                # Take the closest to the cursor.
+                newCursor, _ = possiblePositions[-1]
+
+                self.cursor = newCursor
+                self.__moveCursor()
+
+            return NullAction()
+
+        elif inputVal == Terminal.DOWN:
+            cursorPositions = self.__calcCursorPositions(text, positions)
+            _, (curRow, curColumn) = cursorPositions[cursor]
+
+            possiblePositions = [
+                c
+                for c in cursorPositions
+                if (c[1][0] == curRow + 1) and (c[1][1] <= curColumn)
+            ]
+            if possiblePositions:
+                # Take the closest to the cursor.
+                newCursor, _ = possiblePositions[-1]
+
+                self.cursor = newCursor
                 self.__moveCursor()
 
             return NullAction()
