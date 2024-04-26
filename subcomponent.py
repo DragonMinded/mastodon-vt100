@@ -708,6 +708,11 @@ class MultiLineInputBox(Focusable):
 
                 else:
                     # Erasing in the middle of the text.
+                    while positions[cursor - 1] == -1:
+                        cursor -= 1
+                        if cursor < 0:
+                            raise Exception("Logic error, cannot find erase point!")
+
                     spot = positions[cursor - 1]
                     self.text = self.text[:spot] + self.text[(spot + 1) :]
                     self.cursor -= 1
@@ -767,7 +772,7 @@ class MultiLineInputBox(Focusable):
                     if lines[i][j] != newLines[i][j]:
                         if firstDiff == -1:
                             firstDiff = j
-                        lastDiff = j
+                        lastDiff = j + 1
                 if oldLength != newLength:
                     lastDiff = max(oldLength, newLength)
                 if firstDiff == -1:
