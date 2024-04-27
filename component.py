@@ -669,7 +669,7 @@ class NewPostComponent(Component):
 
                 self.client.createPost(status, visibility, cw=cw)
                 self.renderer.status(
-                    "Posted new status, hit " r" to refresh timeline and see it!"
+                    'Posted new status, hit "r" to refresh timeline and see it!'
                 )
 
                 # Go back now, once post was successfully posted.
