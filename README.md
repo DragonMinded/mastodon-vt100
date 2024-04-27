@@ -18,4 +18,6 @@ Note that you can run with help, like the following example, to see all options:
 python3 masto.py --help
 ```
 
+Note that original VT-100 terminals, and variants such as the 101 and 102, need the XON/XOFF flow control option enabled. Make sure you enable flow control on the terminal itself, and then use the `--flow` argument to avoid overloading the terminal. Newer terminals such as mid-80s VT-100 clones often do not suffer from this problem and keep up just fine.
+
 Happy posting!
