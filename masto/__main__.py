@@ -11,20 +11,20 @@ from .renderer import Renderer
 
 
 def spawnTerminal(port: str, baudrate: int, flow: bool, wide: bool) -> Terminal:
-    print("Attempting to contact VT-100...", end="")
+    print("Attempting to contact VT-100...", end="", file=sys.stderr)
     sys.stdout.flush()
 
     while True:
         try:
             terminal = SerialTerminal(port, baudrate, flowControl=flow)
-            print("SUCCESS!")
+            print("SUCCESS!", file=sys.stderr)
 
             break
         except TerminalException:
             # Wait for terminal to re-awaken.
             time.sleep(1.0)
 
-            print(".", end="")
+            print(".", end="", file=sys.stderr)
             sys.stdout.flush()
 
     if wide:
@@ -74,7 +74,7 @@ def main(
                 if inputVal:
                     action = renderer.processInput(inputVal)
                     if isinstance(action, ExitAction):
-                        print("Got request to end session!")
+                        print("Got request to end session!", file=sys.stderr)
                         exiting = True
                     elif isinstance(action, SwapScreenAction):
                         action.swap(renderer, **action.params)
@@ -83,10 +83,10 @@ def main(
 
         except TerminalException:
             # Terminal went away mid-transaction.
-            print("Lost terminal, will attempt a reconnect.")
+            print("Lost terminal, will attempt a reconnect.", file=sys.stderr)
 
         except KeyboardInterrupt:
-            print("Got request to end session!")
+            print("Got request to end session!", file=sys.stderr)
             exiting = True
 
     # Restore the screen before exiting.

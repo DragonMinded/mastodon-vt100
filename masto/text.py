@@ -1,3 +1,4 @@
+import sys
 from html.parser import HTMLParser
 from typing import List, Optional, Sequence, Tuple, TypeVar
 
@@ -453,7 +454,7 @@ class MastodonParser(HTMLParser):
             # Underline it!
             self.pending = self.__underline_last_code()
         else:
-            print("Unsupported start tag", tag)
+            print("Unsupported start tag", tag, file=sys.stderr)
 
     def handle_endtag(self, tag: str) -> None:
         if tag == "p":
@@ -476,7 +477,7 @@ class MastodonParser(HTMLParser):
         elif tag in {"span", "br"}:
             pass
         else:
-            print("Unsupported end tag", tag)
+            print("Unsupported end tag", tag, file=sys.stderr)
 
     def handle_data(self, data: str) -> None:
         self.text += data
@@ -803,4 +804,4 @@ if __name__ == "__main__":
     )
 
     # Hey we did it!
-    print("Passed")
+    print("Passed", file=sys.stderr)
