@@ -41,9 +41,8 @@ Then, you can run the application similar to:
 python3 -m masto <your home instance here>
 ```
 
-Note that you can run with help, like the following example, to see all options:
+You can also run with `--help`, like the following example, to see all options:
 
 ```
 python3 -m masto --help
 ```
-
