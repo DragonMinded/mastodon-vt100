@@ -313,6 +313,10 @@ class TimelineComponent(Component):
                     if self.posts[post].toggle_spoiler():
                         # This needs redrawing.
                         for line in range(off, off + self.posts[post].height):
+                            if line < self.top:
+                                continue
+                            if line > self.bottom:
+                                continue
                             self._drawOneLine(line)
 
                     break
