@@ -1,4 +1,4 @@
-from typing import Any, Callable, Dict, TYPE_CHECKING
+from typing import Any, Callable, TYPE_CHECKING
 
 
 if TYPE_CHECKING:
@@ -22,9 +22,7 @@ class BackAction(Action):
 
 
 class SwapScreenAction(Action):
-    def __init__(
-        self, swap: Callable[["Renderer"], None], **params: Dict[str, Any]
-    ) -> None:
+    def __init__(self, swap: Callable[["Renderer"], None], **params: Any) -> None:
         self.swap = swap
         self.params = params or {}
 

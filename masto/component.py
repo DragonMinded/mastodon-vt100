@@ -28,7 +28,7 @@ from .subcomponent import (
     OneLineInputBox,
     MultiLineInputBox,
 )
-from .text import ControlCodes, display, highlight, wordwrap, pad
+from .text import ControlCodes, display, html, highlight, wordwrap, pad
 
 
 class Component:
@@ -76,10 +76,28 @@ class TimelineComponent(Component):
         # Keep track of the top of each post, and it's post number, so we can
         # render deep-dive numbers.
         self.positions: Dict[int, int] = self._postIndexes()
+        self.drawn = False
+
+    def __get_help(self) -> str:
+        return "".join(
+            [
+                "<u>Navigation</u><br />",
+                "<p><b>up</b> and <b>down</b> keys scroll the timeline up or down one single line.</p>",
+                "<p><b>n</b> scrolls until the next post is at the top of the screen.</p>",
+                "<p><b>p</b> scrolls until the previous post is at the top of the screen.</p>",
+                "<p><b>t</b> scrolls to the top of the timeline.</p>",
+                "<u>Actions</u><br />",
+                "<p><b>r</b> refreshes the timeline, scrolling to the top of the refreshed content.</p>",
+                "<p><b>c</b> opens up the composer to write a new post.</p>",
+                "<p><b>q</b> quits to the login screen.</p>",
+            ]
+        )
 
     def draw(self) -> None:
         self.__draw()
-        self.renderer.status("")
+        if not self.drawn:
+            self.drawn = True
+            self.renderer.status("Press '?' for help.")
 
     def __draw(self) -> Optional[Tuple[int, int]]:
         pos = -self.offset
@@ -383,13 +401,20 @@ class TimelineComponent(Component):
 
             # Now, draw them.
             self.__draw()
-            self.renderer.status("")
+            self.renderer.status("Press '?' for help.")
 
             return NullAction()
 
         elif inputVal == b"c":
             # Post a new post action.
             return SwapScreenAction(spawnPostScreen)
+
+        elif inputVal == b"?":
+            # Post a new post action.
+            self.drawn = False
+            return SwapScreenAction(
+                spawnHTMLScreen, content=self.__get_help(), exitMessage="Drawing..."
+            )
 
         elif inputVal == b"p":
             # Move to previous post.
@@ -549,7 +574,7 @@ class TimelineComponent(Component):
             # Now, draw them.
             for line in infiniteScrollRedraw:
                 self._drawOneLine(line)
-            self.renderer.status("")
+            self.renderer.status("Press '?' for help.")
 
         return NullAction()
 
@@ -620,6 +645,9 @@ class NewPostComponent(Component):
         ]
 
     def draw(self) -> None:
+        # Nuke the status.
+        self.renderer.status("")
+
         # First, draw the top bits.
         lines = self.__summonBox()
         bounds = BoundingRectangle(
@@ -699,9 +727,7 @@ class NewPostComponent(Component):
                     raise Exception("Logic error, couldn't map visibility!")
 
                 self.client.createPost(status, visibility, cw=cw)
-                self.renderer.status(
-                    'Posted new status, hit "r" to refresh timeline and see it!'
-                )
+                self.renderer.status("New status posted! Press '?' for help.")
 
                 # Go back now, once post was successfully posted.
                 return BackAction()
@@ -969,6 +995,59 @@ class ErrorComponent(Component):
         return None
 
 
+class HTMLComponent(Component):
+    def __init__(
+        self,
+        renderer: Renderer,
+        top: int,
+        bottom: int,
+        *,
+        content: str = "",
+        exitMessage: str = "",
+    ) -> None:
+        super().__init__(renderer, top, bottom)
+
+        self.exitMessage = exitMessage
+
+        content, codes = html(content)
+        self.lines = [
+            (t, list(c)) for (t, c) in wordwrap(content, codes, self.renderer.columns)
+        ]
+
+        # If we ever make this more complex, we'll need to scroll here.
+        maxLines = (self.bottom - self.top) + 1
+        if len(self.lines) > maxLines:
+            self.lines = self.lines[:maxLines]
+
+    def draw(self) -> None:
+        # Fill in the lines so we can blank the screen.
+        self.renderer.status("Press 'b' to go back to the previous screen.")
+        for line in range(self.top, self.bottom + 1):
+            self.renderer.terminal.moveCursor(line, 1)
+            self.renderer.terminal.sendCommand(Terminal.CLEAR_LINE)
+
+        # Just draw the HTML.
+        bounds = BoundingRectangle(
+            top=self.top,
+            bottom=self.top + len(self.lines),
+            left=1,
+            right=self.renderer.columns + 1,
+        )
+        display(self.terminal, self.lines, bounds)
+
+        # Move the cursor somewhere arbitrary.
+        self.renderer.terminal.moveCursor(self.bottom, self.renderer.columns)
+
+    def processInput(self, inputVal: bytes) -> Optional[Action]:
+        if inputVal == b"b":
+            # Go back to the previous page.
+            if self.exitMessage:
+                self.renderer.status(self.exitMessage)
+            return BackAction()
+
+        return None
+
+
 def spawnLoginScreen(
     renderer: Renderer, *, server: str = "", username: str = "", password: str = ""
 ) -> None:
@@ -1013,3 +1092,19 @@ def spawnTimelineScreen(
 
 def spawnPostScreen(renderer: Renderer) -> None:
     renderer.push([NewPostComponent(renderer, top=1, bottom=renderer.rows)])
+
+
+def spawnHTMLScreen(
+    renderer: Renderer, *, content: str = "", exitMessage: str = ""
+) -> None:
+    renderer.push(
+        [
+            HTMLComponent(
+                renderer,
+                top=1,
+                bottom=renderer.rows,
+                content=content,
+                exitMessage=exitMessage,
+            )
+        ]
+    )
