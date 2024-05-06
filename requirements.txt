@@ -3,6 +3,3 @@ mastodon.py
 emoji
 pytz
 tzlocal
-mypy
-flake8
-black

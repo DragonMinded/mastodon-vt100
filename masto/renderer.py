@@ -1,10 +1,10 @@
 from vtpy import Terminal
 
-from action import Action, ExitAction, CTRL_C_INPUT
-from client import Client
-from text import pad
-
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
+
+from .action import Action, ExitAction, CTRL_C_INPUT
+from .client import Client
+from .text import pad
 
 
 if TYPE_CHECKING:

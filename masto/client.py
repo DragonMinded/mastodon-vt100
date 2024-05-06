@@ -27,7 +27,7 @@ class InvalidClientError(Exception):
 
 class Client:
     SECRETS_LOC: str = os.path.abspath(
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "secrets")
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "secrets")
     )
     CLIENT_NAME: str = "Mastodon for VT-100"
 

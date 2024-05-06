@@ -1,6 +1,8 @@
 from vtpy import Terminal
 
-from action import (
+from typing import Any, Dict, List, Optional, Tuple
+
+from .action import (
     Action,
     NullAction,
     ExitAction,
@@ -8,17 +10,17 @@ from action import (
     SwapScreenAction,
     FOCUS_INPUT,
 )
-from client import Timeline, Visibility, BadLoginError
-from clip import BoundingRectangle
-from drawhelpers import (
+from .client import Timeline, Visibility, BadLoginError
+from .clip import BoundingRectangle
+from .drawhelpers import (
     boxtop,
     boxmiddle,
     boxbottom,
     join,
     account,
 )
-from renderer import Renderer
-from subcomponent import (
+from .renderer import Renderer
+from .subcomponent import (
     TimelinePost,
     FocusWrapper,
     Button,
@@ -26,9 +28,7 @@ from subcomponent import (
     OneLineInputBox,
     MultiLineInputBox,
 )
-from text import ControlCodes, display, highlight, wordwrap, pad
-
-from typing import Any, Dict, List, Optional, Tuple
+from .text import ControlCodes, display, highlight, wordwrap, pad
 
 
 class Component:

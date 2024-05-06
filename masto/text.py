@@ -1,7 +1,9 @@
-from clip import BoundingRectangle
-from vtpy import Terminal
 from html.parser import HTMLParser
 from typing import List, Optional, Sequence, Tuple, TypeVar
+
+from vtpy import Terminal
+
+from .clip import BoundingRectangle
 
 
 class ControlCodes:

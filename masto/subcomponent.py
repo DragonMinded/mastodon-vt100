@@ -3,11 +3,13 @@ from abc import ABC
 from datetime import datetime
 from tzlocal import get_localzone
 
+from typing import Any, Dict, List, Optional, Tuple
+
 from vtpy import Terminal
 
-from action import Action, NullAction, FOCUS_INPUT, UNFOCUS_INPUT
-from clip import BoundingRectangle
-from drawhelpers import (
+from .action import Action, NullAction, FOCUS_INPUT, UNFOCUS_INPUT
+from .clip import BoundingRectangle
+from .drawhelpers import (
     boost,
     account,
     boxtop,
@@ -15,8 +17,8 @@ from drawhelpers import (
     boxbottom,
     replace,
 )
-from renderer import Renderer
-from text import (
+from .renderer import Renderer
+from .text import (
     ControlCodes,
     display,
     highlight,
@@ -27,8 +29,6 @@ from text import (
     obfuscate,
     center,
 )
-
-from typing import Any, Dict, List, Optional, Tuple
 
 
 class TimelinePost:

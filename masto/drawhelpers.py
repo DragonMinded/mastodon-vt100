@@ -1,4 +1,4 @@
-from text import ControlCodes, highlight, sanitize
+from .text import ControlCodes, highlight, sanitize
 
 from typing import List, Sequence, Tuple, Union
 
