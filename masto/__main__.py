@@ -95,62 +95,67 @@ def main(
     return 0
 
 
-parser = argparse.ArgumentParser(description="VT-100 Mastodon Client")
+def cli() -> None:
+    parser = argparse.ArgumentParser(description="VT-100 Mastodon Client")
 
-parser.add_argument(
-    "--port",
-    default="/dev/ttyUSB0",
-    type=str,
-    help="Serial port to open, defaults to /dev/ttyUSB0",
-)
-parser.add_argument(
-    "--baud",
-    default=9600,
-    type=int,
-    help="Baud rate to use with VT-100, defaults to 9600",
-)
-parser.add_argument(
-    "--flow",
-    action="store_true",
-    help="Enable software-based flow control (XON/XOFF)",
-)
-parser.add_argument(
-    "--wide",
-    action="store_true",
-    help="Enable wide mode (132 characters instead of 80 characters)",
-)
-parser.add_argument(
-    "server",
-    metavar="SERVER",
-    type=str,
-    help="Mastodon-compatible server to connect to",
-)
-parser.add_argument(
-    "username",
-    metavar="USERNAME",
-    nargs="?",
-    type=str,
-    default="",
-    help="Username to pre-fill on the login screen",
-)
-parser.add_argument(
-    "password",
-    metavar="PASSWORD",
-    nargs="?",
-    type=str,
-    default="",
-    help="Password to pre-fill on the login screen",
-)
-args = parser.parse_args()
-
-sys.exit(
-    main(
-        args.server,
-        args.username,
-        args.password,
-        args.port,
-        args.baud,
-        args.flow,
-        args.wide,
+    parser.add_argument(
+        "--port",
+        default="/dev/ttyUSB0",
+        type=str,
+        help="Serial port to open, defaults to /dev/ttyUSB0",
     )
-)
+    parser.add_argument(
+        "--baud",
+        default=9600,
+        type=int,
+        help="Baud rate to use with VT-100, defaults to 9600",
+    )
+    parser.add_argument(
+        "--flow",
+        action="store_true",
+        help="Enable software-based flow control (XON/XOFF)",
+    )
+    parser.add_argument(
+        "--wide",
+        action="store_true",
+        help="Enable wide mode (132 characters instead of 80 characters)",
+    )
+    parser.add_argument(
+        "server",
+        metavar="SERVER",
+        type=str,
+        help="Mastodon-compatible server to connect to",
+    )
+    parser.add_argument(
+        "username",
+        metavar="USERNAME",
+        nargs="?",
+        type=str,
+        default="",
+        help="Username to pre-fill on the login screen",
+    )
+    parser.add_argument(
+        "password",
+        metavar="PASSWORD",
+        nargs="?",
+        type=str,
+        default="",
+        help="Password to pre-fill on the login screen",
+    )
+    args = parser.parse_args()
+
+    sys.exit(
+        main(
+            args.server,
+            args.username,
+            args.password,
+            args.port,
+            args.baud,
+            args.flow,
+            args.wide,
+        )
+    )
+
+
+if __name__ == "__main__":
+    cli()
