@@ -20,6 +20,7 @@ What doesn't work that I would like to get to at some point:
 - Ability to like or boost a post from the focus view.
 - Support for other timelines, such as local timeline and private messages.
 - Additional formatting support for the post renderer.
+- Asynchronous notifications using the terminal bell, notification viewer.
 
 What I may get to at some point in the future:
 
