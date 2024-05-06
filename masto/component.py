@@ -292,6 +292,33 @@ class TimelineComponent(Component):
                 username=self.properties["username"],
             )
 
+        elif inputVal in {b"!", b"@", b"#", b"$", b"%", b"^", b"&", b"*", b"(", b")"}:
+            postNo = {
+                b"!": 0,
+                b"@": 1,
+                b"#": 2,
+                b"$": 3,
+                b"%": 4,
+                b"^": 5,
+                b"&": 6,
+                b"*": 7,
+                b"(": 8,
+                b")": 9,
+            }[inputVal]
+
+            minpost = self.positions[min(self.positions.keys())]
+            for off, post in self.positions.items():
+                if post - minpost == postNo:
+                    # This is the right post.
+                    if self.posts[post].toggle_spoiler():
+                        # This needs redrawing.
+                        for line in range(off, off + self.posts[post].height):
+                            self._drawOneLine(line)
+
+                    break
+
+            return NullAction()
+
         elif inputVal == b"t":
             # Move to top of page.
             if self.offset > 0:
@@ -356,7 +383,7 @@ class TimelineComponent(Component):
 
             return NullAction()
 
-        elif inputVal == b"p":
+        elif inputVal == b"c":
             # Post a new post action.
             return SwapScreenAction(spawnPostScreen)
 

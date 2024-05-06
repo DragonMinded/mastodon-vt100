@@ -8,7 +8,7 @@ from .text import pad
 
 
 if TYPE_CHECKING:
-    from component import Component
+    from .component import Component
 
 
 class Renderer:

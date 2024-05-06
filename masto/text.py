@@ -615,6 +615,18 @@ def obfuscate(line: str) -> str:
     return "*" * len(line)
 
 
+def spoiler(line: str) -> str:
+    def conv(x: str) -> str:
+        if ord(x) <= 32:
+            return x
+        if x.isspace():
+            return x
+
+        return "#"
+
+    return "".join(conv(x) for x in line)
+
+
 if __name__ == "__main__":
     # I know there's a billion better ways to do this but IDGAF.
     def verify(

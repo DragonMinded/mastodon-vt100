@@ -2,7 +2,7 @@ from typing import Any, Callable, Dict, TYPE_CHECKING
 
 
 if TYPE_CHECKING:
-    from renderer import Renderer
+    from .renderer import Renderer
 
 
 class Action:

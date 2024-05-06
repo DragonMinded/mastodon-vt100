@@ -27,6 +27,7 @@ from .text import (
     wordwrap,
     pad,
     obfuscate,
+    spoiler,
     center,
 )
 
@@ -41,62 +42,110 @@ class TimelinePost:
             # First, start with the name of the reblogger.
             name = emoji.demojize(striplow(self.data["account"]["display_name"]))
             username = emoji.demojize(striplow(self.data["account"]["acct"]))
-            boostline = boost(name, username, renderer.columns - 2)
+            self.boostline = [boost(name, username, renderer.columns - 2)]
 
             # Now, grab the original name.
             name = emoji.demojize(striplow(reblog["account"]["display_name"]))
             username = emoji.demojize(striplow(reblog["account"]["acct"]))
-            nameline = account(name, username, renderer.columns - 2)
+            self.nameline = account(name, username, renderer.columns - 2)
 
             content = emoji.demojize(striplow(reblog["content"]))
             content, codes = html(content)
-            postbody = wordwrap(content, codes, renderer.columns - 2)
-
-            # Actual contents.
-            textlines = [
-                boostline,
-                nameline,
-                *postbody,
-                *self.__format_attachments(reblog["media_attachments"]),
+            self.spoilerText = [
+                content,
+                spoiler(content),
             ]
+            self.spoilerCodes = codes
+
+            # Format the spoiler text if it exists.
+            if reblog["spoiler_text"]:
+                self.cwlines = [
+                    highlight(
+                        "<r>"
+                        + pad(
+                            "CW: " + striplow(reblog["spoiler_text"]),
+                            renderer.columns - 2,
+                        )
+                        + "</r>"
+                    )
+                ]
+                self.spoilered = True
+                self.spoilerNeeded = True
+            else:
+                self.cwlines = []
+                self.spoilered = False
+                self.spoilerNeeded = False
 
             # Stats formatting.
-            stats = self.__format_stats(self.data["created_at"], reblog)
+            self.stats = self.__format_stats(self.data["created_at"], reblog)
+            self.attachments = self.__format_attachments(reblog["media_attachments"])
 
-            # Now, surround the post in a box.
-            self.lines = [
-                boxtop(renderer.columns),
-                *[boxmiddle(line, renderer.columns) for line in textlines],
-                replace(boxbottom(renderer.columns), stats, offset=-2),
-            ]
         else:
             # First, start with the name of the account.
             name = emoji.demojize(striplow(self.data["account"]["display_name"]))
             username = emoji.demojize(striplow(self.data["account"]["acct"]))
-            nameline = account(name, username, renderer.columns - 2)
+            self.nameline = account(name, username, renderer.columns - 2)
+
+            # No boost line here.
+            self.boostline = []
 
             content = emoji.demojize(striplow(self.data["content"]))
             content, codes = html(content)
-            postbody = wordwrap(content, codes, renderer.columns - 2)
-
-            # Actual contents.
-            textlines = [
-                nameline,
-                *postbody,
-                *self.__format_attachments(self.data["media_attachments"]),
+            self.spoilerText = [
+                content,
+                spoiler(content),
             ]
+            self.spoilerCodes = codes
+
+            # Format the spoiler text if it exists.
+            if self.data["spoiler_text"]:
+                self.cwlines = [
+                    highlight(
+                        "<r>"
+                        + pad(
+                            "CW: " + striplow(self.data["spoiler_text"]),
+                            renderer.columns - 2,
+                        )
+                        + "</r>"
+                    )
+                ]
+                self.spoilered = True
+                self.spoilerNeeded = True
+            else:
+                self.cwlines = []
+                self.spoilered = False
+                self.spoilerNeeded = False
 
             # Stats formatting.
-            stats = self.__format_stats(self.data["created_at"], self.data)
+            self.stats = self.__format_stats(self.data["created_at"], self.data)
+            self.attachments = self.__format_attachments(self.data["media_attachments"])
 
-            # Now, surround the post in a box.
-            self.lines = [
-                boxtop(renderer.columns),
-                *[boxmiddle(line, renderer.columns) for line in textlines],
-                replace(boxbottom(renderer.columns), stats, offset=-2),
-            ]
-
+        self.lines = self.__format_lines()
         self.height = len(self.lines)
+
+    def __format_lines(self) -> List[Tuple[str, List[ControlCodes]]]:
+        # Format postbody
+        postbody = wordwrap(
+            self.spoilerText[1] if self.spoilered else self.spoilerText[0],
+            self.spoilerCodes,
+            self.renderer.columns - 2,
+        )
+
+        # Actual contents.
+        textlines = [
+            *self.boostline,
+            self.nameline,
+            *self.cwlines,
+            *postbody,
+            *self.attachments,
+        ]
+
+        # Now, surround the post in a box.
+        return [
+            boxtop(self.renderer.columns),
+            *[boxmiddle(line, self.renderer.columns) for line in textlines],
+            replace(boxbottom(self.renderer.columns), self.stats, offset=-2),
+        ]
 
     def __format_stats(
         self,
@@ -158,6 +207,13 @@ class TimelinePost:
             ]
 
         return attachmentLines
+
+    def toggle_spoiler(self) -> bool:
+        if not self.spoilerNeeded:
+            return False
+        self.spoilered = not self.spoilered
+        self.lines = self.__format_lines()
+        return True
 
     def draw(self, top: int, bottom: int, offset: int, postno: Optional[int]) -> None:
         # Maybe there's a better way to do this? Maybe display() should take substitutions?

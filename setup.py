@@ -1,21 +1,21 @@
-from setuptools import setup
+from distutils.core import setup
 
 
 setup(
-    name='masto',
-    version='0.1.0',
-    description='VT-100 Mastodon Client',
-    author='DragonMinded',
-    license='Public Domain',
+    name="masto",
+    version="0.1.0",
+    description="VT-100 Mastodon Client",
+    author="DragonMinded",
+    license="Public Domain",
     packages=[
-        'masto',
+        "masto",
     ],
     install_requires=[
-        req for req in open('requirements.txt').read().split('\n') if len(req) > 0
+        req for req in open("requirements.txt").read().split("\n") if len(req) > 0
     ],
     entry_points={
-        'console_scripts': [
-            'mastodon-vt100 = masto.__main__:cli',
+        "console_scripts": [
+            "mastodon-vt100 = masto.__main__:cli",
         ],
     },
 )
