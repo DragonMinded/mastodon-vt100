@@ -12,26 +12,25 @@ from .renderer import Renderer
 
 def spawnTerminal(port: str, baudrate: int, flow: bool, wide: bool) -> Terminal:
     print("Attempting to contact VT-100...", end="", file=sys.stderr)
-    sys.stdout.flush()
+    sys.stderr.flush()
 
     while True:
         try:
             terminal = SerialTerminal(port, baudrate, flowControl=flow)
-            print("SUCCESS!", file=sys.stderr)
 
-            break
+            if wide:
+                terminal.set132Columns()
+            else:
+                terminal.set80Columns()
+
+            print("SUCCESS!", file=sys.stderr)
+            return terminal
         except TerminalException:
             # Wait for terminal to re-awaken.
             time.sleep(1.0)
 
             print(".", end="", file=sys.stderr)
-            sys.stdout.flush()
-
-    if wide:
-        terminal.set132Columns()
-    else:
-        terminal.set80Columns()
-    return terminal
+            sys.stderr.flush()
 
 
 def main(
