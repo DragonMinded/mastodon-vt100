@@ -64,11 +64,11 @@ python3 -m pip install -r requirements-dev.txt
 Then, you can run the application similar to:
 
 ```
-python3 -m masto <your home instance here>
+python3 mastodon-vt100 <your home instance here>
 ```
 
 You can also run with `--help`, like the following example, to see all options:
 
 ```
-python3 -m masto --help
+python3 mastodon-vt100 --help
 ```
