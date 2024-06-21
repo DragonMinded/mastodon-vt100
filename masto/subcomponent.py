@@ -34,8 +34,9 @@ from .text import (
 
 
 class TimelinePost:
-    def __init__(self, renderer: "Renderer", data: StatusDict) -> None:
+    def __init__(self, renderer: "Renderer", data: StatusDict, highlighted: bool = False) -> None:
         self.renderer = renderer
+        self.highlighted = highlighted
         self.data = data
 
         reblog = self.data["reblog"]
@@ -143,9 +144,9 @@ class TimelinePost:
 
         # Now, surround the post in a box.
         return [
-            boxtop(self.renderer.columns),
-            *[boxmiddle(line, self.renderer.columns) for line in textlines],
-            replace(boxbottom(self.renderer.columns), self.stats, offset=-2),
+            boxtop(self.renderer.columns, bold=self.highlighted),
+            *[boxmiddle(line, self.renderer.columns, bold=self.highlighted) for line in textlines],
+            replace(boxbottom(self.renderer.columns, bold=self.highlighted), self.stats, offset=-2),
         ]
 
     def __format_stats(

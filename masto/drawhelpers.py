@@ -3,22 +3,22 @@ from .text import ControlCodes, highlight, sanitize
 from typing import List, Sequence, Tuple, Union
 
 
-def boxtop(width: int) -> Tuple[str, List[ControlCodes]]:
+def boxtop(width: int, bold: bool = False) -> Tuple[str, List[ControlCodes]]:
     return (
         ("\u250C" + ("\u2500" * (width - 2)) + "\u2510"),
-        [ControlCodes(bold=False, underline=False, reverse=False)] * width,
+        [ControlCodes(bold=bold, underline=False, reverse=False)] * width,
     )
 
 
-def boxbottom(width: int) -> Tuple[str, List[ControlCodes]]:
+def boxbottom(width: int, bold: bool = False) -> Tuple[str, List[ControlCodes]]:
     return (
         ("\u2514" + ("\u2500" * (width - 2)) + "\u2518"),
-        [ControlCodes(bold=False, underline=False, reverse=False)] * width,
+        [ControlCodes(bold=bold, underline=False, reverse=False)] * width,
     )
 
 
 def boxmiddle(
-    line: Tuple[str, Sequence[ControlCodes]], width: int
+    line: Tuple[str, Sequence[ControlCodes]], width: int,  bold: bool = False
 ) -> Tuple[str, List[ControlCodes]]:
     text = line[0][: (width - 2)]
     codes = line[1][: (width - 2)]
@@ -33,9 +33,9 @@ def boxmiddle(
 
     text = "\u2502" + text + "\u2502"
     codes = [
-        ControlCodes(bold=False, underline=False, reverse=False),
+        ControlCodes(bold=bold, underline=False, reverse=False),
         *codes,
-        ControlCodes(bold=False, underline=False, reverse=False),
+        ControlCodes(bold=bold, underline=False, reverse=False),
     ]
     return (text, codes)
 
