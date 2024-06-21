@@ -94,6 +94,10 @@ class Client:
 
         return cast(List[Dict[str, Any]], statuses)
 
+    def getPreferences(self) -> Dict[str, Any]:
+        self.__assert_valid()
+        return cast(Dict[str, Any], self.__client.preferences())
+
     def getAccountInfo(self, accountID: Optional[int] = None) -> Dict[str, Any]:
         self.__assert_valid()
 

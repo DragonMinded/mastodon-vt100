@@ -71,12 +71,19 @@ class TimelineComponent(Component):
         self.renderer.status("Timeline fetched, drawing...")
 
         # Now, format each post into it's own component.
-        self.posts = [TimelinePost(self.renderer, status) for status in self.statuses]
+        self.posts = [self.__get_post(status) for status in self.statuses]
 
         # Keep track of the top of each post, and it's post number, so we can
         # render deep-dive numbers.
         self.positions: Dict[int, int] = self._postIndexes()
         self.drawn = False
+
+    def __get_post(self, status: Dict[str, Any]) -> TimelinePost:
+        post = TimelinePost(self.renderer, status)
+        if self.properties["prefs"].get('reading:expand:spoilers', False):
+            # Auto-expand any spoilered text.
+            post.toggle_spoiler()
+        return post
 
     def __get_help(self) -> str:
         return "".join(
@@ -394,9 +401,7 @@ class TimelineComponent(Component):
             self.renderer.status("Timeline fetched, drawing...")
 
             # Now, format each post into it's own component.
-            self.posts = [
-                TimelinePost(self.renderer, status) for status in self.statuses
-            ]
+            self.posts = [self.__get_post(status) for status in self.statuses]
             self.positions = self._postIndexes()
 
             # Now, draw them.
@@ -562,7 +567,7 @@ class TimelineComponent(Component):
             self.renderer.status("Additional posts fetched, drawing...")
 
             # Now, format each post into it's own component.
-            newPosts = [TimelinePost(self.renderer, status) for status in newStatuses]
+            newPosts = [self.__get_post(status) for status in newStatuses]
 
             self.statuses += newStatuses
             self.posts += newPosts
@@ -891,6 +896,7 @@ class LoginComponent(Component):
 
                     # Look up other account info for everyone to use.
                     self.properties["account"] = self.client.getAccountInfo()
+                    self.properties["prefs"] = self.client.getPreferences()
 
                     self.renderer.status("Login successful, fetching timeline...")
 
