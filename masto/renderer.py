@@ -1,14 +1,22 @@
 from vtpy import Terminal
 
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import List, Optional, TypedDict, TYPE_CHECKING
 
 from .action import Action, ExitAction, CTRL_C_INPUT
-from .client import Client
+from .client import Client, AccountInfoDict, PreferencesDict, StatusDict
 from .text import pad
 
 
 if TYPE_CHECKING:
     from .component import Component
+
+
+class SystemProperties(TypedDict, total=False):
+    server: str
+    username: str
+    account: AccountInfoDict
+    prefs: PreferencesDict
+    last_post: Optional[StatusDict]
 
 
 class Renderer:
@@ -18,7 +26,7 @@ class Renderer:
         self.client = client
 
         # Our global properties.
-        self.properties: Dict[str, Any] = {}
+        self.properties: SystemProperties = {}
 
         # Start with no components.
         self.__components: List["Component"] = []

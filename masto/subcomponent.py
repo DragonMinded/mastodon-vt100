@@ -3,11 +3,12 @@ from abc import ABC
 from datetime import datetime
 from tzlocal import get_localzone
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from vtpy import Terminal
 
 from .action import Action, NullAction, FOCUS_INPUT, UNFOCUS_INPUT
+from .client import StatusDict, MediaDict
 from .clip import BoundingRectangle
 from .drawhelpers import (
     boost,
@@ -33,7 +34,7 @@ from .text import (
 
 
 class TimelinePost:
-    def __init__(self, renderer: "Renderer", data: Dict[str, Any]) -> None:
+    def __init__(self, renderer: "Renderer", data: StatusDict) -> None:
         self.renderer = renderer
         self.data = data
 
@@ -150,7 +151,7 @@ class TimelinePost:
     def __format_stats(
         self,
         timestamp: datetime,
-        data: Dict[str, Any],
+        data: StatusDict,
     ) -> Tuple[str, List[ControlCodes]]:
         stats: List[str] = []
 
@@ -185,7 +186,7 @@ class TimelinePost:
         return highlight("\u2524" + "\u251c\u2500\u2524".join(stats) + "\u251c")
 
     def __format_attachments(
-        self, attachments: List[Dict[str, Any]]
+        self, attachments: List[MediaDict],
     ) -> List[Tuple[str, List[ControlCodes]]]:
         attachmentLines = []
         for attachment in attachments:

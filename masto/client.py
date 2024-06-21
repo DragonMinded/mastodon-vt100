@@ -1,9 +1,10 @@
 import os
+from datetime import datetime
 from enum import Enum, auto
 from mastodon import Mastodon  # type: ignore
 from mastodon.errors import MastodonNetworkError, MastodonIllegalArgumentError  # type: ignore
 from urllib.parse import urlparse
-from typing import Any, Dict, List, Optional, cast
+from typing import List, Optional, TypedDict, cast
 
 
 class Timeline(Enum):
@@ -23,6 +24,62 @@ class BadLoginError(Exception):
 
 class InvalidClientError(Exception):
     pass
+
+
+PreferencesDict = TypedDict(
+    'PreferencesDict',
+    # Based on mastodon.py documentation and printing the contents from my local
+    # mastodon server.
+    {
+        'posting:default:language': str,
+        'posting:default:sensitive': bool,
+        'posting:default:visibility': str,
+        'reading:autoplay:gifs': bool,
+        'reading:expand:media': str,
+        'reading:expand:spoilers': bool,
+    },
+)
+
+
+class AccountInfoDict(TypedDict):
+    # Incomplete, there's a ton more on mastodon.py that I haven't put here yet.
+    id: int
+    username: str
+    acct: str
+    display_name: str
+
+
+class MediaDict(TypedDict):
+    # Incomplete, there's a ton more on mastodon.py that I haven't put here yet.
+    id: int
+    type: str
+    url: str
+    description: Optional[str]
+
+
+class StatusDict(TypedDict):
+    # Incomplete, there's a ton more on mastodon.py that I haven't put here yet.
+    id: int
+    uri: str
+    url: str
+    account: AccountInfoDict
+    reblog: Optional["StatusDict"]
+    content: str
+    spoiler_text: Optional[str]
+    media_attachments: List[MediaDict]
+    created_at: datetime
+    replies_count: int
+    reblogs_count: int
+    favourites_count: int
+    favourited: bool
+    reblogged: bool
+    muted: bool
+    bookmarked: bool
+
+
+class RelatedDict(TypedDict):
+    ancestors: List[StatusDict]
+    descendants: List[StatusDict]
 
 
 class Client:
@@ -81,8 +138,8 @@ class Client:
         which: Timeline,
         *,
         limit: int = 20,
-        since: Optional[Dict[str, Any]] = None,
-    ) -> List[Dict[str, Any]]:
+        since: Optional[StatusDict] = None,
+    ) -> List[StatusDict]:
         self.__assert_valid()
 
         if which == Timeline.HOME:
@@ -92,23 +149,31 @@ class Client:
         else:
             raise Exception("Unknown timeline to fetch!")
 
-        return cast(List[Dict[str, Any]], statuses)
+        return cast(List[StatusDict], statuses)
 
-    def getPreferences(self) -> Dict[str, Any]:
+    def fetchPost(self, postId: int) -> StatusDict:
         self.__assert_valid()
-        return cast(Dict[str, Any], self.__client.preferences())
+        return cast(StatusDict, self.__client.status(postId))
 
-    def getAccountInfo(self, accountID: Optional[int] = None) -> Dict[str, Any]:
+    def fetchRelated(self, postId: int) -> RelatedDict:
+        self.__assert_valid()
+        return cast(RelatedDict, self.__client.status_context(postId))
+
+    def getPreferences(self) -> PreferencesDict:
+        self.__assert_valid()
+        return cast(PreferencesDict, self.__client.preferences())
+
+    def getAccountInfo(self, accountID: Optional[int] = None) -> AccountInfoDict:
         self.__assert_valid()
 
         if accountID:
-            return cast(Dict[str, Any], self.__client.account(accountID))
+            return cast(AccountInfoDict, self.__client.account(accountID))
         else:
-            return cast(Dict[str, Any], self.__client.me())
+            return cast(AccountInfoDict, self.__client.me())
 
     def createPost(
         self, status: str, visibility: Visibility, *, cw: Optional[str] = None
-    ) -> Dict[str, Any]:
+    ) -> StatusDict:
         self.__assert_valid()
 
         if visibility == Visibility.PUBLIC:
@@ -123,6 +188,6 @@ class Client:
             raise Exception("Unknown post visibility!")
 
         return cast(
-            Dict[str, Any],
+            StatusDict,
             self.__client.status_post(status, visibility=visStr, spoiler_text=cw),
         )

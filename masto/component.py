@@ -1,6 +1,6 @@
 from vtpy import Terminal
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from .action import (
     Action,
@@ -10,7 +10,7 @@ from .action import (
     SwapScreenAction,
     FOCUS_INPUT,
 )
-from .client import Timeline, Visibility, BadLoginError
+from .client import Timeline, Visibility, BadLoginError, StatusDict
 from .clip import BoundingRectangle
 from .drawhelpers import (
     boxtop,
@@ -19,7 +19,7 @@ from .drawhelpers import (
     join,
     account,
 )
-from .renderer import Renderer
+from .renderer import Renderer, SystemProperties
 from .subcomponent import (
     TimelinePost,
     FocusWrapper,
@@ -41,7 +41,7 @@ class Component:
         self.rows = (bottom - top) + 1
 
     @property
-    def properties(self) -> Dict[str, Any]:
+    def properties(self) -> SystemProperties:
         return self.renderer.properties
 
     def draw(self) -> None:
@@ -78,7 +78,7 @@ class TimelineComponent(Component):
         self.positions: Dict[int, int] = self._postIndexes()
         self.drawn = False
 
-    def __get_post(self, status: Dict[str, Any]) -> TimelinePost:
+    def __get_post(self, status: StatusDict) -> TimelinePost:
         post = TimelinePost(self.renderer, status)
         if self.properties["prefs"].get('reading:expand:spoilers', False):
             # Auto-expand any spoilered text.
@@ -104,7 +104,7 @@ class TimelineComponent(Component):
         self.__draw()
         if not self.drawn:
             self.drawn = True
-            if self.renderer.properties.get('last_post'):
+            if self.properties.get('last_post'):
                 self.renderer.status("New status posted! Press '?' for help.")
             else:
                 self.renderer.status("Press '?' for help.")
@@ -313,7 +313,7 @@ class TimelineComponent(Component):
 
         elif inputVal == b"q":
             # Log back out.
-            self.renderer.properties['last_post'] = None
+            self.properties['last_post'] = None
             self.renderer.status("Logged out.")
             return SwapScreenAction(
                 spawnLoginScreen,
@@ -398,7 +398,7 @@ class TimelineComponent(Component):
 
         elif inputVal == b"r":
             # Refresh timeline action.
-            self.renderer.properties['last_post'] = None
+            self.properties['last_post'] = None
             self.renderer.status("Refetching timeline...")
 
             self.offset = 0
@@ -418,7 +418,7 @@ class TimelineComponent(Component):
         elif inputVal == b"c":
             # Post a new post action.
             self.drawn = False
-            self.renderer.properties['last_post'] = None
+            self.properties['last_post'] = None
             return SwapScreenAction(spawnPostScreen, exitMessage="Drawing...")
 
         elif inputVal == b"?":
@@ -565,7 +565,7 @@ class TimelineComponent(Component):
 
         # Figure out if we should load the next bit of timeline.
         if infiniteScrollFetch:
-            self.renderer.properties['last_post'] = None
+            self.properties['last_post'] = None
             self.renderer.status("Fetching more posts...")
 
             newStatuses = self.client.fetchTimeline(
@@ -750,7 +750,7 @@ class NewPostComponent(Component):
                 else:
                     raise Exception("Logic error, couldn't map visibility!")
 
-                self.renderer.properties['last_post'] = self.client.createPost(status, visibility, cw=cw)
+                self.properties['last_post'] = self.client.createPost(status, visibility, cw=cw)
                 self.renderer.status("New status posted! Drawing...")
 
                 # Go back now, once post was successfully posted.
