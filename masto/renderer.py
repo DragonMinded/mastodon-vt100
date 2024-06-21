@@ -55,9 +55,15 @@ class Renderer:
     def columns(self) -> int:
         return self.terminal.columns
 
-    def status(self, text: str) -> None:
+    @property
+    def currentStatus(self) -> str:
+        return self.__lastStatus or ""
+
+    def status(self, text: str) -> str:
         if text == self.__lastStatus:
-            return
+            return self.__lastStatus or ""
+
+        oldStatus = self.__lastStatus
 
         self.__lastStatus = text
         row, col = self.terminal.fetchCursor()
@@ -71,6 +77,8 @@ class Renderer:
         # Work around a bug with cursor report timing after drawing status
         # on the original VT-10X terminals.
         self.terminal.moveCursor(row, col)
+
+        return oldStatus or ""
 
     def processInput(self, inputVal: bytes) -> Optional[Action]:
         # First, try handling it with the registered components.

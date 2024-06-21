@@ -104,7 +104,10 @@ class TimelineComponent(Component):
         self.__draw()
         if not self.drawn:
             self.drawn = True
-            self.renderer.status("Press '?' for help.")
+            if self.renderer.properties.get('last_post'):
+                self.renderer.status("New status posted! Press '?' for help.")
+            else:
+                self.renderer.status("Press '?' for help.")
 
     def __draw(self) -> Optional[Tuple[int, int]]:
         pos = -self.offset
@@ -310,6 +313,7 @@ class TimelineComponent(Component):
 
         elif inputVal == b"q":
             # Log back out.
+            self.renderer.properties['last_post'] = None
             self.renderer.status("Logged out.")
             return SwapScreenAction(
                 spawnLoginScreen,
@@ -394,6 +398,7 @@ class TimelineComponent(Component):
 
         elif inputVal == b"r":
             # Refresh timeline action.
+            self.renderer.properties['last_post'] = None
             self.renderer.status("Refetching timeline...")
 
             self.offset = 0
@@ -412,10 +417,12 @@ class TimelineComponent(Component):
 
         elif inputVal == b"c":
             # Post a new post action.
-            return SwapScreenAction(spawnPostScreen)
+            self.drawn = False
+            self.renderer.properties['last_post'] = None
+            return SwapScreenAction(spawnPostScreen, exitMessage="Drawing...")
 
         elif inputVal == b"?":
-            # Post a new post action.
+            # Display hotkeys action.
             self.drawn = False
             return SwapScreenAction(
                 spawnHTMLScreen, content=self.__get_help(), exitMessage="Drawing..."
@@ -558,6 +565,7 @@ class TimelineComponent(Component):
 
         # Figure out if we should load the next bit of timeline.
         if infiniteScrollFetch:
+            self.renderer.properties['last_post'] = None
             self.renderer.status("Fetching more posts...")
 
             newStatuses = self.client.fetchTimeline(
@@ -585,8 +593,10 @@ class TimelineComponent(Component):
 
 
 class NewPostComponent(Component):
-    def __init__(self, renderer: Renderer, top: int, bottom: int) -> None:
+    def __init__(self, renderer: Renderer, top: int, bottom: int, exitMessage: str = "") -> None:
         super().__init__(renderer, top, bottom)
+
+        self.exitMessage = exitMessage
 
         # Figure out their default posting preference.
         server_pref = self.properties["prefs"].get('posting:default:visibility', 'public')
@@ -659,8 +669,8 @@ class NewPostComponent(Component):
         ]
 
     def draw(self) -> None:
-        # Nuke the status.
-        self.renderer.status("")
+        # Display help for navigating.
+        self.renderer.status("Use tab to move between inputs.")
 
         # First, draw the top bits.
         lines = self.__summonBox()
@@ -740,13 +750,15 @@ class NewPostComponent(Component):
                 else:
                     raise Exception("Logic error, couldn't map visibility!")
 
-                self.client.createPost(status, visibility, cw=cw)
-                self.renderer.status("New status posted! Press '?' for help.")
+                self.renderer.properties['last_post'] = self.client.createPost(status, visibility, cw=cw)
+                self.renderer.status("New status posted! Drawing...")
 
                 # Go back now, once post was successfully posted.
                 return BackAction()
             elif self.focusWrapper.component == 4:
                 # Client wants to discard their post.
+                if self.exitMessage:
+                    self.renderer.status(self.exitMessage)
                 return BackAction()
 
             return NullAction()
@@ -1105,8 +1117,8 @@ def spawnTimelineScreen(
     )
 
 
-def spawnPostScreen(renderer: Renderer) -> None:
-    renderer.push([NewPostComponent(renderer, top=1, bottom=renderer.rows)])
+def spawnPostScreen(renderer: Renderer, exitMessage: str = "") -> None:
+    renderer.push([NewPostComponent(renderer, top=1, bottom=renderer.rows, exitMessage=exitMessage)])
 
 
 def spawnHTMLScreen(
