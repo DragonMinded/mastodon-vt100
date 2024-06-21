@@ -588,6 +588,14 @@ class NewPostComponent(Component):
     def __init__(self, renderer: Renderer, top: int, bottom: int) -> None:
         super().__init__(renderer, top, bottom)
 
+        # Figure out their default posting preference.
+        server_pref = self.properties["prefs"].get('posting:default:visibility', 'public')
+        default_visibility: Optional[str] = {
+            'public': "public",
+            'unlisted': "quiet public",
+            'private': "followers",
+        }.get(server_pref)
+
         self.component = 0
 
         self.postBody = MultiLineInputBox(
@@ -602,6 +610,7 @@ class NewPostComponent(Component):
             self.top + 14,
             19,
             25,
+            selected=default_visibility,
         )
         self.post = Button(renderer, "Post", self.top + 17, 2)
         self.discard = Button(renderer, "Discard", self.top + 17, 9)
