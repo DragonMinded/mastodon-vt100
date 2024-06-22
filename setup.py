@@ -2,8 +2,8 @@ from distutils.core import setup
 
 
 setup(
-    name="masto",
-    version="0.1.3",
+    name="vtmasto",
+    version="0.1.4",
     description="VT-100 Mastodon Client",
     author="DragonMinded",
     license="Public Domain",
