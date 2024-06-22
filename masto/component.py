@@ -83,6 +83,10 @@ class TimelineTabsComponent(Component):
                 tabtext += f"<r> {text} </r> "
 
         tabbits = highlight(tabtext)
+
+        # Clear the line, and then display the text.
+        self.renderer.terminal.moveCursor(self.top, len(tabbits[0]) + 1)
+        self.renderer.terminal.sendCommand(Terminal.CLEAR_TO_END_OF_LINE)
         bounds = BoundingRectangle(
             top=self.top,
             bottom=self.top + 1,
@@ -97,6 +101,10 @@ class TimelineTabsComponent(Component):
     def __get_help(self) -> str:
         return "".join(
             [
+                "<u>Timeline Selection</u><br />",
+                "<p><b>h</b> view your home timeline</p>",
+                "<p><b>l</b> view your local instance timeline</p>",
+                "<p><b>g</b> view the global timeline</p>",
                 "<u>Navigation</u><br />",
                 "<p><b>up</b> and <b>down</b> keys scroll the timeline up or down one single line.</p>",
                 "<p><b>n</b> scrolls until the next post is at the top of the screen.</p>",
@@ -125,6 +133,25 @@ class TimelineTabsComponent(Component):
             return SwapScreenAction(
                 spawnHTMLScreen, content=self.__get_help(), exitMessage="Drawing..."
             )
+
+        if inputVal in {b"h", b"l", b"g"}:
+            # Move to tab.
+            timeline = {
+                b"h": Timeline.HOME,
+                b"l": Timeline.LOCAL,
+                b"g": Timeline.PUBLIC,
+            }[inputVal]
+
+            if self.timeline != timeline:
+                # Switch to this timeline.
+                if timeline not in self.timelines:
+                    self.renderer.status("Fetching timeline...")
+                    self.timelines[timeline] = TimelineComponent(self.renderer, self.top + 1, self.bottom, timeline=timeline)
+
+                self.timeline = timeline
+                self.draw()
+
+            return NullAction()
 
         # Now, handle input for the tab we're on.
         return self.timelines[self.timeline].processInput(inputVal)
@@ -196,11 +223,15 @@ class TimelineComponent(Component):
             bottom = top + post.height
             if bottom > self.bottom:
                 bottom = self.bottom
+            offset = 0
+            if top < self.top:
+                offset = self.top - top
+                top = self.top
 
             minpost = self.positions[min(self.positions.keys())]
             postno = self.positions.get(top)
             post.draw(
-                top, bottom, 0, postno - minpost + 1 if postno is not None else None
+                top, bottom, offset, postno - minpost + 1 if postno is not None else None
             )
             pos += post.height
 

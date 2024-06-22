@@ -7,10 +7,10 @@ A Mastodon client that uses a VT-100 or compatible terminal to display. Assuming
 Right now this is a fairly rudimentary client. The following features are present:
 
 - Basic login/logout flow for your Mastodon-compatible instance.
-- Preference respecting for CW auto-expansion and default post visibility.
-- Home timeline, including rendering alt-text and CW text display toggling.
-- Infinite scroll, where additional posts are fetched when you hit the bottom of the timeline.
+- Home, local and public timelines, including rendering alt-text and CW text display toggling.
+- Infinite scroll, where additional posts are fetched when you hit the bottom of a timeline.
 - Composer box, supporting the ability to post with an optional CW and choosing the visibility.
+- Preference respecting for CW auto-expansion and composer default post visibility.
 
 What doesn't work that I would like to get to at some point:
 
@@ -18,7 +18,7 @@ What doesn't work that I would like to get to at some point:
 - Ability to reply to posts instead of only posting to your own timeline.
 - User profile view.
 - Ability to like or boost a post from the focus view.
-- Support for other timelines, such as local timeline and private messages.
+- Conversation/private messaging support.
 - Additional formatting support for the post renderer.
 - Asynchronous notifications using the terminal bell, notification viewer.
 
