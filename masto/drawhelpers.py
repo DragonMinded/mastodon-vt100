@@ -18,7 +18,7 @@ def boxbottom(width: int, bold: bool = False) -> Tuple[str, List[ControlCodes]]:
 
 
 def boxmiddle(
-    line: Tuple[str, Sequence[ControlCodes]], width: int,  bold: bool = False
+    line: Tuple[str, Sequence[ControlCodes]], width: int, bold: bool = False
 ) -> Tuple[str, List[ControlCodes]]:
     text = line[0][: (width - 2)]
     codes = line[1][: (width - 2)]

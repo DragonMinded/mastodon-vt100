@@ -9,6 +9,8 @@ from typing import List, Optional, TypedDict, cast
 
 class Timeline(Enum):
     HOME = auto()
+    LOCAL = auto()
+    PUBLIC = auto()
 
 
 class Visibility(Enum):
@@ -145,6 +147,14 @@ class Client:
         if which == Timeline.HOME:
             statuses = self.__client.timeline(
                 timeline="home", limit=limit, max_id=since
+            )
+        elif which == Timeline.LOCAL:
+            statuses = self.__client.timeline(
+                timeline="local", limit=limit, max_id=since
+            )
+        elif which == Timeline.PUBLIC:
+            statuses = self.__client.timeline(
+                timeline="public", limit=limit, max_id=since
             )
         else:
             raise Exception("Unknown timeline to fetch!")

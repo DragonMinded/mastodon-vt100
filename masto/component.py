@@ -51,6 +51,85 @@ class Component:
         return None
 
 
+class TimelineTabsComponent(Component):
+    def __init__(
+        self,
+        renderer: Renderer,
+        top: int,
+        bottom: int,
+        *,
+        timeline: Timeline = Timeline.HOME,
+    ) -> None:
+        super().__init__(renderer, top, bottom)
+
+        # Start with the specified timeline.
+        self.timelines: Dict[Timeline, TimelineComponent] = {
+            timeline: TimelineComponent(renderer, top + 1, bottom, timeline=timeline),
+        }
+        self.timeline = timeline
+        self.choices: Dict[Timeline, str] = {
+            Timeline.HOME: "[H]ome",
+            Timeline.LOCAL: "[L]ocal",
+            Timeline.PUBLIC: "[G]lobal",
+        }
+
+    def draw(self) -> None:
+        # First, draw our tabs.
+        tabtext = ""
+        for choice, text in self.choices.items():
+            if choice == self.timeline:
+                tabtext += f"<b><r> {text} </r></b> "
+            else:
+                tabtext += f"<r> {text} </r> "
+
+        tabbits = highlight(tabtext)
+        bounds = BoundingRectangle(
+            top=self.top,
+            bottom=self.top + 1,
+            left=1,
+            right=self.renderer.columns + 1
+        )
+        display(self.renderer.terminal, [tabbits], bounds)
+
+        # Now, draw the timeline itself.
+        self.timelines[self.timeline].draw()
+
+    def __get_help(self) -> str:
+        return "".join(
+            [
+                "<u>Navigation</u><br />",
+                "<p><b>up</b> and <b>down</b> keys scroll the timeline up or down one single line.</p>",
+                "<p><b>n</b> scrolls until the next post is at the top of the screen.</p>",
+                "<p><b>p</b> scrolls until the previous post is at the top of the screen.</p>",
+                "<p><b>t</b> scrolls to the top of the timeline.</p>",
+                "<u>Actions</u><br />",
+                "<p><b>r</b> refreshes the timeline, scrolling to the top of the refreshed content.</p>",
+                "<p><b>c</b> opens up the composer to write a new post.</p>",
+                "<p><b>q</b> quits to the login screen.</p>",
+            ]
+        )
+
+    @property
+    def drawn(self) -> bool:
+        return self.timelines[self.timeline].drawn
+
+    @drawn.setter
+    def drawn(self, newval: bool) -> None:
+        self.timelines[self.timeline].drawn = newval
+
+    def processInput(self, inputVal: bytes) -> Optional[Action]:
+        # First, handle our own input.
+        if inputVal == b"?":
+            # Display hotkeys action.
+            self.drawn = False
+            return SwapScreenAction(
+                spawnHTMLScreen, content=self.__get_help(), exitMessage="Drawing..."
+            )
+
+        # Now, handle input for the tab we're on.
+        return self.timelines[self.timeline].processInput(inputVal)
+
+
 class TimelineComponent(Component):
     def __init__(
         self,
@@ -84,21 +163,6 @@ class TimelineComponent(Component):
             # Auto-expand any spoilered text.
             post.toggle_spoiler()
         return post
-
-    def __get_help(self) -> str:
-        return "".join(
-            [
-                "<u>Navigation</u><br />",
-                "<p><b>up</b> and <b>down</b> keys scroll the timeline up or down one single line.</p>",
-                "<p><b>n</b> scrolls until the next post is at the top of the screen.</p>",
-                "<p><b>p</b> scrolls until the previous post is at the top of the screen.</p>",
-                "<p><b>t</b> scrolls to the top of the timeline.</p>",
-                "<u>Actions</u><br />",
-                "<p><b>r</b> refreshes the timeline, scrolling to the top of the refreshed content.</p>",
-                "<p><b>c</b> opens up the composer to write a new post.</p>",
-                "<p><b>q</b> quits to the login screen.</p>",
-            ]
-        )
 
     def draw(self) -> None:
         self.__draw()
@@ -234,6 +298,7 @@ class TimelineComponent(Component):
 
         for cnt, post in enumerate(self.posts):
             if cnt == postNumber:
+                # TODO: might be buggy
                 return pos + self.top
 
             pos += post.height
@@ -257,9 +322,10 @@ class TimelineComponent(Component):
                 self.positions = newPositions
 
                 self.terminal.sendCommand(Terminal.SAVE_CURSOR)
-                self.terminal.setScrollRegion(self.top, self.bottom)
                 self.terminal.moveCursor(self.top, 1)
+                self.terminal.setScrollRegion(self.top, self.bottom)
                 self.terminal.sendCommand(Terminal.MOVE_CURSOR_UP)
+                self.terminal.clearScrollRegion()
 
                 # Redraw post numbers if necessary.
                 if postNumberRedraw:
@@ -271,7 +337,6 @@ class TimelineComponent(Component):
                         self._drawOneLine(line)
 
                 self._drawOneLine(self.top)
-                self.terminal.clearScrollRegion()
                 self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
 
             handled = True
@@ -289,8 +354,9 @@ class TimelineComponent(Component):
 
                 self.terminal.sendCommand(Terminal.SAVE_CURSOR)
                 self.terminal.setScrollRegion(self.top, self.bottom)
-                self.terminal.moveCursor(self.bottom, 1)
+                self.terminal.moveCursor((self.bottom - self.top) + 1, 1)
                 self.terminal.sendCommand(Terminal.MOVE_CURSOR_DOWN)
+                self.terminal.clearScrollRegion()
 
                 # Redraw post numbers if necessary.
                 if postNumberRedraw:
@@ -306,7 +372,6 @@ class TimelineComponent(Component):
                     # data after we finish drawing.
                     infiniteScrollFetch = True
                     infiniteScrollRedraw.append(self.bottom)
-                self.terminal.clearScrollRegion()
                 self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
 
             handled = True
@@ -367,10 +432,11 @@ class TimelineComponent(Component):
                     self.positions = newPositions
 
                     self.terminal.sendCommand(Terminal.SAVE_CURSOR)
-                    self.terminal.setScrollRegion(self.top, self.bottom)
                     self.terminal.moveCursor(self.top, 1)
+                    self.terminal.setScrollRegion(self.top, self.bottom)
                     for _ in range(drawAmount):
                         self.terminal.sendCommand(Terminal.MOVE_CURSOR_UP)
+                    self.terminal.clearScrollRegion()
 
                     # Redraw post numbers if necessary.
                     if postNumberRedraw:
@@ -386,7 +452,6 @@ class TimelineComponent(Component):
 
                     for line in range(drawAmount):
                         self._drawOneLine(self.top + line)
-                    self.terminal.clearScrollRegion()
                     self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
                 else:
                     # We must redraw the whole screen.
@@ -421,13 +486,6 @@ class TimelineComponent(Component):
             self.properties['last_post'] = None
             return SwapScreenAction(spawnPostScreen, exitMessage="Drawing...")
 
-        elif inputVal == b"?":
-            # Display hotkeys action.
-            self.drawn = False
-            return SwapScreenAction(
-                spawnHTMLScreen, content=self.__get_help(), exitMessage="Drawing..."
-            )
-
         elif inputVal == b"p":
             # Move to previous post.
             postAndOffset = self._getPostForLine(self.top)
@@ -457,10 +515,11 @@ class TimelineComponent(Component):
                 if moveAmount <= (self.bottom - self.top):
                     # We can scroll to save render time.
                     self.terminal.sendCommand(Terminal.SAVE_CURSOR)
-                    self.terminal.setScrollRegion(self.top, self.bottom)
                     self.terminal.moveCursor(self.top, 1)
+                    self.terminal.setScrollRegion(self.top, self.bottom)
                     for _ in range(moveAmount):
                         self.terminal.sendCommand(Terminal.MOVE_CURSOR_UP)
+                    self.terminal.clearScrollRegion()
 
                     # Redraw post numbers if necessary.
                     if postNumberRedraw:
@@ -476,7 +535,6 @@ class TimelineComponent(Component):
 
                     for line in range(moveAmount):
                         self._drawOneLine(self.top + line)
-                    self.terminal.clearScrollRegion()
                     self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
                 else:
                     # We must redraw the whole screen.
@@ -519,9 +577,10 @@ class TimelineComponent(Component):
                     # We can scroll to save render time.
                     self.terminal.sendCommand(Terminal.SAVE_CURSOR)
                     self.terminal.setScrollRegion(self.top, self.bottom)
-                    self.terminal.moveCursor(self.bottom, 1)
+                    self.terminal.moveCursor((self.bottom - self.top) + 1, 1)
                     for _ in range(moveAmount):
                         self.terminal.sendCommand(Terminal.MOVE_CURSOR_DOWN)
+                    self.terminal.clearScrollRegion()
 
                     # Redraw post numbers if necessary.
                     if postNumberRedraw:
@@ -547,7 +606,6 @@ class TimelineComponent(Component):
                             # data after we finish drawing.
                             infiniteScrollFetch = True
                             infiniteScrollRedraw.append(actualLine)
-                    self.terminal.clearScrollRegion()
                     self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
                 else:
                     # We must redraw the whole screen.
@@ -1112,9 +1170,7 @@ def spawnErrorScreen(
 def spawnTimelineScreen(
     renderer: Renderer, *, timeline: Timeline = Timeline.HOME
 ) -> None:
-    renderer.push(
-        [TimelineComponent(renderer, top=1, bottom=renderer.rows, timeline=timeline)]
-    )
+    renderer.push([TimelineTabsComponent(renderer, top=1, bottom=renderer.rows, timeline=timeline)])
 
 
 def spawnPostScreen(renderer: Renderer, exitMessage: str = "") -> None:
