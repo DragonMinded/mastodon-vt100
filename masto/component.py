@@ -177,6 +177,12 @@ class TimelineComponent(Component):
         pos = -self.offset
         viewHeight = (self.bottom - self.top) + 1
 
+        # It seems that the cursor can get out of sync in a few rare cases. Fix that
+        # here by just moving to the top. If we don't, the screen ends up rendered
+        # correctly anyway, but drawn from the bottom up instead of top down. VT-100
+        # is fun to code for!
+        self.renderer.terminal.moveCursor(self.top, 1)
+
         for post in self.posts:
             if pos >= viewHeight:
                 # Too low below the viewport.

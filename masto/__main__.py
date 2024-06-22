@@ -23,6 +23,9 @@ def spawnTerminal(port: str, baudrate: int, flow: bool, wide: bool) -> Terminal:
             else:
                 terminal.set80Columns()
 
+            terminal.sendCommand(Terminal.TURN_OFF_WRAP_FORWARD_MODE)
+            terminal.sendCommand(Terminal.TURN_OFF_WRAP_BACKWARD_MODE)
+
             print("SUCCESS!", file=sys.stderr)
             return terminal
         except TerminalException:
