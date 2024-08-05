@@ -4,7 +4,7 @@ from enum import Enum, auto
 from mastodon import Mastodon  # type: ignore
 from mastodon.errors import MastodonNetworkError, MastodonIllegalArgumentError  # type: ignore
 from urllib.parse import urlparse
-from typing import List, Optional, TypedDict, cast
+from typing import Dict, List, Optional, TypedDict, cast
 
 
 class Timeline(Enum):
@@ -62,6 +62,7 @@ class MediaDict(TypedDict):
 class StatusDict(TypedDict):
     # Incomplete, there's a ton more on mastodon.py that I haven't put here yet.
     id: int
+    in_reply_to_id: Optional[int]
     uri: str
     url: str
     account: AccountInfoDict
@@ -70,6 +71,8 @@ class StatusDict(TypedDict):
     spoiler_text: Optional[str]
     media_attachments: List[MediaDict]
     created_at: datetime
+    ancestors: List["StatusDict"]
+    replies: List["StatusDict"]
     replies_count: int
     reblogs_count: int
     favourites_count: int
@@ -163,11 +166,91 @@ class Client:
 
     def fetchPost(self, postId: int) -> StatusDict:
         self.__assert_valid()
-        return cast(StatusDict, self.__client.status(postId))
+        post = cast(StatusDict, self.__client.status(postId))
+        post['ancestors'] = []
+        post['replies'] = []
+        return post
 
-    def fetchRelated(self, postId: int) -> RelatedDict:
+    def fetchPostAndRelated(self, postId: int) -> StatusDict:
         self.__assert_valid()
-        return cast(RelatedDict, self.__client.status_context(postId))
+        post = self.fetchPost(postId)
+        related = cast(RelatedDict, self.__client.status_context(postId))
+
+        # Set some sane defaults.
+        post['ancestors'] = []
+        post['replies'] = []
+
+        if related['ancestors']:
+            # First, get a linked list of ancestors.
+            ancestors = related['ancestors']
+            for a in ancestors:
+                a['replies'] = []
+                a['ancestors'] = []
+
+            # Start by grabbing the origin, which is the ancestor with no in reply ID.
+            # Filter that out of the list of ancestors, and set our linked list to point at
+            # the origin.
+            origin: Optional[StatusDict] = [a for a in ancestors if a['in_reply_to_id'] is None][0]
+            ancestors = [a for a in ancestors if a['in_reply_to_id']]
+            current = origin
+
+            while ancestors:
+                if not current:
+                    raise Exception("Logic error, current post is None")
+
+                # Find the next ancestor that is in reply to the current.
+                nextPosts = [a for a in ancestors if a['in_reply_to_id'] == current['id']]
+                ancestors = [a for a in ancestors if a['in_reply_to_id'] != current['id']]
+
+                if len(nextPosts) != 1:
+                    raise Exception(f"Logic error, had more than one ancestor pointing at ID {current['id']}")
+
+                nextPost = nextPosts[0]
+                current['replies'] = [nextPost]
+                current = nextPost
+
+            # Now, change the linked list back into a normal list of ancestors.
+            ancestors = []
+            while origin:
+                # Grab the current post, set the origin to the next in the linked list.
+                current = origin
+                origin = current['replies'][0] if current['replies'] else None
+
+                # Sever the linked list here.
+                current['ancestors'] = []
+                current['replies'] = []
+                ancestors.append(current)
+
+            # Finally, update the post we're returning with the sorted list of ancestors.
+            post['ancestors'] = ancestors
+
+        if related['descendants']:
+            # Sort by linked lists of replies so each direct descendant is inside the list of
+            # replies of the parent post.
+            posts_by_id: Dict[int, StatusDict] = {
+                post['id']: post,
+            }
+
+            descendants = related['descendants']
+            for d in descendants:
+                d['replies'] = []
+                d['ancestors'] = []
+
+            while descendants:
+                for d in descendants:
+                    if d['in_reply_to_id'] is None:
+                        raise Exception(f"Logic error, post ID {d['id']} should be a reply to another post")
+
+                    if d['in_reply_to_id'] in posts_by_id:
+                        # We have this reply-to's parent tracked, so add it as a child, and add it
+                        # tracked.
+                        posts_by_id[d['in_reply_to_id']]['replies'].append(d)
+                        posts_by_id[d['id']] = d
+
+                # Keep around only those who we didn't find a parent for this iteration.
+                descendants = [d for d in descendants if d['id'] not in posts_by_id]
+
+        return post
 
     def getPreferences(self) -> PreferencesDict:
         self.__assert_valid()
