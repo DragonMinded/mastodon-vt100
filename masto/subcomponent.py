@@ -11,11 +11,12 @@ from .action import Action, NullAction, FOCUS_INPUT, UNFOCUS_INPUT
 from .client import StatusDict, MediaDict
 from .clip import BoundingRectangle
 from .drawhelpers import (
-    boost,
     account,
+    boost,
     boxtop,
     boxmiddle,
     boxbottom,
+    join,
     replace,
 )
 from .renderer import Renderer
@@ -66,18 +67,19 @@ class TimelinePost:
             False,
             set(),
         )
+        self.width = renderer.columns - (3 * self.threadInfo.level)
 
         reblog = self.data["reblog"]
         if reblog:
             # First, start with the name of the reblogger.
             name = emoji.demojize(striplow(self.data["account"]["display_name"]))
             username = emoji.demojize(striplow(self.data["account"]["acct"]))
-            self.boostline = [boost(name, username, renderer.columns - 2)]
+            self.boostline = [boost(name, username, self.width - 2)]
 
             # Now, grab the original name.
             name = emoji.demojize(striplow(reblog["account"]["display_name"]))
             username = emoji.demojize(striplow(reblog["account"]["acct"]))
-            self.nameline = account(name, username, renderer.columns - 2)
+            self.nameline = account(name, username, self.width - 2)
 
             content = emoji.demojize(striplow(reblog["content"]))
             content, codes = html(content)
@@ -94,7 +96,7 @@ class TimelinePost:
                         "<r>"
                         + pad(
                             "CW: " + striplow(reblog["spoiler_text"]),
-                            renderer.columns - 2,
+                            self.width - 2,
                         )
                         + "</r>"
                     )
@@ -114,7 +116,7 @@ class TimelinePost:
             # First, start with the name of the account.
             name = emoji.demojize(striplow(self.data["account"]["display_name"]))
             username = emoji.demojize(striplow(self.data["account"]["acct"]))
-            self.nameline = account(name, username, renderer.columns - 2)
+            self.nameline = account(name, username, self.width - 2)
 
             # No boost line here.
             self.boostline = []
@@ -134,7 +136,7 @@ class TimelinePost:
                         "<r>"
                         + pad(
                             "CW: " + striplow(self.data["spoiler_text"]),
-                            renderer.columns - 2,
+                            self.width - 2,
                         )
                         + "</r>"
                     )
@@ -153,12 +155,15 @@ class TimelinePost:
         self.lines = self.__format_lines()
         self.height = len(self.lines)
 
+    def __prefix(self, body: Tuple[str, List[ControlCodes]]) -> Tuple[str, List[ControlCodes]]:
+        return join([highlight("   " * self.threadInfo.level), body])
+
     def __format_lines(self) -> List[Tuple[str, List[ControlCodes]]]:
         # Format postbody
         postbody = wordwrap(
             self.spoilerText[1] if self.spoilered else self.spoilerText[0],
             self.spoilerCodes,
-            self.renderer.columns - 2,
+            self.width - 2,
         )
 
         # Actual contents.
@@ -171,11 +176,33 @@ class TimelinePost:
         ]
 
         # Now, surround the post in a box.
-        return [
-            boxtop(self.renderer.columns, bold=self.threadInfo.highlighted),
-            *[boxmiddle(line, self.renderer.columns, bold=self.threadInfo.highlighted) for line in textlines],
-            replace(boxbottom(self.renderer.columns, bold=self.threadInfo.highlighted), self.stats, offset=-2),
+        formattedlines = [
+            self.__prefix(boxtop(self.width, bold=self.threadInfo.highlighted)),
+            *[self.__prefix(boxmiddle(line, self.width, bold=self.threadInfo.highlighted)) for line in textlines],
+            self.__prefix(replace(boxbottom(self.width, bold=self.threadInfo.highlighted), self.stats, offset=-2)),
         ]
+
+        # Now, decorate the box with any sort of threading indicators.
+        if self.threadInfo.hasDescendants:
+            formattedlines[-1] = replace(formattedlines[-1], "\u252c", 1 + (3 * self.threadInfo.level))
+        if self.threadInfo.hasAncestors:
+            formattedlines[0] = replace(formattedlines[0], "\u2534", 1 + (3 * self.threadInfo.level))
+        if self.threadInfo.hasParent:
+            formattedlines[0] = replace(formattedlines[0], "\u2502", (3 * self.threadInfo.level) - 2)
+            formattedlines[1] = replace(
+                formattedlines[1],
+                "\u251c\u2500" if self.threadInfo.hasSiblings else "\u2514\u2500",
+                (3 * self.threadInfo.level) - 2,
+            )
+        if self.threadInfo.hasSiblings:
+            for i in range(2, len(formattedlines)):
+                formattedlines[i] = replace(formattedlines[i], "\u2502", (3 * self.threadInfo.level) - 2)
+
+        for level in self.threadInfo.siblingLevels:
+            for i in range(len(formattedlines)):
+                formattedlines[i] = replace(formattedlines[i], "\u2502", (3 * level) - 2)
+
+        return formattedlines
 
     def __format_stats(
         self,
@@ -226,14 +253,14 @@ class TimelinePost:
             url = (attachment["url"] or "").split("/")[-1]
             description, codes = highlight(f"<u>{url}</u>: {alt}")
 
-            attachmentbody = wordwrap(description, codes, self.renderer.columns - 4)
+            attachmentbody = wordwrap(description, codes, self.width - 4)
             attachmentLines += [
-                boxtop(self.renderer.columns - 2),
+                boxtop(self.width - 2),
                 *[
-                    boxmiddle(line, self.renderer.columns - 2)
+                    boxmiddle(line, self.width - 2)
                     for line in attachmentbody
                 ],
-                boxbottom(self.renderer.columns - 2),
+                boxbottom(self.width - 2),
             ]
 
         return attachmentLines
@@ -251,7 +278,7 @@ class TimelinePost:
             postText = f"\u2524{postno}\u251c"
         else:
             postText = "\u2500\u2500\u2500"
-        self.lines[0] = replace(self.lines[0], postText, offset=3)
+        self.lines[0] = replace(self.lines[0], postText, offset=3 + (3 * self.threadInfo.level))
 
         bounds = BoundingRectangle(
             top=top, bottom=bottom + 1, left=1, right=self.renderer.columns + 1
