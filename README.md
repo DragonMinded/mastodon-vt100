@@ -18,6 +18,7 @@ What doesn't work that I would like to get to at some point:
 - Ability to reply to posts instead of only posting to your own timeline.
 - User profile view.
 - Ability to like or boost a post from the focus view.
+- Ability to bookmark a post from the focus view, ability to view bookmarked posts.
 - Conversation/private messaging support.
 - Additional formatting support for the post renderer.
 - Asynchronous notifications using the terminal bell, notification viewer.

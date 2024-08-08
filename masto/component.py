@@ -442,6 +442,34 @@ class TimelineComponent(_PostDisplayComponent):
                 username=self.properties["username"],
             )
 
+        elif inputVal in {b"1", b"2", b"3", b"4", b"5", b"6", b"7", b"8", b"9", b"0"}:
+            postNo = {
+                b"1": 0,
+                b"2": 1,
+                b"3": 2,
+                b"4": 3,
+                b"5": 4,
+                b"6": 5,
+                b"7": 6,
+                b"8": 7,
+                b"9": 8,
+                b"0": 9,
+            }[inputVal]
+
+            minpost = self.positions[min(self.positions.keys())]
+            for off, post in self.positions.items():
+                if off > self.bottom:
+                    break
+
+                if post - minpost == postNo:
+                    # This is the right post.
+                    status = self.statuses[post]
+
+                    self.renderer.status("Fetching post and replies...")
+                    return SwapScreenAction(spawnPostAndRepliesScreen, post=status)
+
+            return NullAction()
+
         elif inputVal in {b"!", b"@", b"#", b"$", b"%", b"^", b"&", b"*", b"(", b")"}:
             postNo = {
                 b"!": 0,
@@ -458,6 +486,9 @@ class TimelineComponent(_PostDisplayComponent):
 
             minpost = self.positions[min(self.positions.keys())]
             for off, post in self.positions.items():
+                if off > self.bottom:
+                    break
+
                 if post - minpost == postNo:
                     # This is the right post.
                     if self.posts[post].toggle_spoiler():
@@ -847,12 +878,13 @@ class PostViewComponent(_PostDisplayComponent):
             )
         )
 
-        if self._is_single_thread(post):
-            # Easy thing, just unwrap
-            posts += self._unwrap_thread(post['replies'][0], 0, set())
-        else:
-            # Harder thing, display stacked
-            posts += self._stack_thread(post['replies'], 1, set())
+        if post['replies']:
+            if self._is_single_thread(post):
+                # Easy thing, just unwrap
+                posts += self._unwrap_thread(post['replies'][0], 0, set())
+            else:
+                # Harder thing, display stacked
+                posts += self._stack_thread(post['replies'], 1, set())
 
         return posts
 
@@ -951,6 +983,9 @@ class PostViewComponent(_PostDisplayComponent):
 
             minpost = self.positions[min(self.positions.keys())]
             for off, post in self.positions.items():
+                if off > self.bottom:
+                    break
+
                 if post - minpost == postNo:
                     # This is the right post.
                     if self.posts[post].toggle_spoiler():
@@ -1010,11 +1045,15 @@ class PostViewComponent(_PostDisplayComponent):
 
             return NullAction()
 
+        elif inputVal == b"b":
+            # Go back to timeline view.
+            return BackAction()
+
         elif inputVal == b"r":
             # TODO: Refresh post!
             if False:
                 # Refresh post action.
-                self.renderer.status("Refetching post...")
+                self.renderer.status("Refetching post and replies...")
 
                 self.offset = 0
                 self.statuses = self.client.fetchTimeline(self.timeline)
@@ -1677,6 +1716,12 @@ def spawnTimelineScreen(
     renderer: Renderer, *, timeline: Timeline = Timeline.HOME
 ) -> None:
     renderer.push([TimelineTabsComponent(renderer, top=1, bottom=renderer.rows, timeline=timeline)])
+
+
+def spawnPostAndRepliesScreen(
+    renderer: Renderer, *, post: Optional[StatusDict] = None
+) -> None:
+    renderer.push([PostViewComponent(renderer, top=1, bottom=renderer.rows, postId=post['id'] if post else 0)])
 
 
 def spawnPostScreen(renderer: Renderer, exitMessage: str = "") -> None:
