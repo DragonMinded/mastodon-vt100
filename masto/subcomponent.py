@@ -177,10 +177,15 @@ class TimelinePost:
 
         # Now, surround the post in a box.
         formattedlines = [
-            self.__prefix(boxtop(self.width, bold=self.threadInfo.highlighted)),
-            *[self.__prefix(boxmiddle(line, self.width, bold=self.threadInfo.highlighted)) for line in textlines],
-            self.__prefix(replace(boxbottom(self.width, bold=self.threadInfo.highlighted), self.stats, offset=-2)),
+            self.__prefix(boxtop(self.width)),
+            *[self.__prefix(boxmiddle(line, self.width)) for line in textlines],
+            self.__prefix(replace(boxbottom(self.width), self.stats, offset=-2)),
         ]
+
+        # Now, if this is highlighted, display that.
+        if self.threadInfo.highlighted:
+            highlightText = "\u2524current\u251c"
+            formattedlines[0] = replace(formattedlines[0], highlightText, offset=7 + (3 * self.threadInfo.level))
 
         # Now, decorate the box with any sort of threading indicators.
         if self.threadInfo.hasDescendants:
@@ -191,7 +196,7 @@ class TimelinePost:
             formattedlines[0] = replace(formattedlines[0], "\u2502", (3 * self.threadInfo.level) - 2)
             formattedlines[1] = replace(
                 formattedlines[1],
-                "\u251c\u2500" if self.threadInfo.hasSiblings else "\u2514\u2500",
+                "\u251c\u2500\u2524" if self.threadInfo.hasSiblings else "\u2514\u2500\u2524",
                 (3 * self.threadInfo.level) - 2,
             )
         if self.threadInfo.hasSiblings:

@@ -169,6 +169,7 @@ class _PostDisplayComponent(Component):
 
         # First, fetch the timeline.
         self.offset: int = 0
+        self.__status_lut: Dict[TimelinePost, StatusDict] = {}
         self.posts: List[TimelinePost] = []
         self.positions: Dict[int, int] = self._postIndexes()
 
@@ -177,7 +178,12 @@ class _PostDisplayComponent(Component):
         if self.properties["prefs"].get('reading:expand:spoilers', False):
             # Auto-expand any spoilered text.
             post.toggle_spoiler()
+
+        self.__status_lut[post] = status
         return post
+
+    def _get_status_from_post(self, post: TimelinePost) -> StatusDict:
+        return self.__status_lut[post]
 
     def _draw(self) -> Optional[Tuple[int, int]]:
         pos = -self.offset
@@ -847,10 +853,10 @@ class PostViewComponent(_PostDisplayComponent):
 
         if post['ancestors']:
             postHasAncestors = True
-            for a in post['ancestors']:
+            for ancestor in post['ancestors']:
                 posts.append(
                     self._get_post(
-                        post,
+                        ancestor,
                         PostThreadInfo(
                             0,
                             False,  # highlight
@@ -967,6 +973,35 @@ class PostViewComponent(_PostDisplayComponent):
                 username=self.properties["username"],
             )
 
+        elif inputVal in {b"1", b"2", b"3", b"4", b"5", b"6", b"7", b"8", b"9", b"0"}:
+            postNo = {
+                b"1": 0,
+                b"2": 1,
+                b"3": 2,
+                b"4": 3,
+                b"5": 4,
+                b"6": 5,
+                b"7": 6,
+                b"8": 7,
+                b"9": 8,
+                b"0": 9,
+            }[inputVal]
+
+            minpost = self.positions[min(self.positions.keys())]
+            for off, post in self.positions.items():
+                if off > self.bottom:
+                    break
+
+                if post - minpost == postNo:
+                    # This is the right post, go to the same screen as we're on but with
+                    # the new post highlighted as the current post.
+                    status = self._get_status_from_post(self.posts[post])
+
+                    self.renderer.status("Fetching post and replies...")
+                    return SwapScreenAction(spawnPostAndRepliesScreen, post=status)
+
+            return NullAction()
+
         elif inputVal in {b"!", b"@", b"#", b"$", b"%", b"^", b"&", b"*", b"(", b")"}:
             postNo = {
                 b"!": 0,
@@ -1050,22 +1085,20 @@ class PostViewComponent(_PostDisplayComponent):
             return BackAction()
 
         elif inputVal == b"r":
-            # TODO: Refresh post!
-            if False:
-                # Refresh post action.
-                self.renderer.status("Refetching post and replies...")
+            # TODO: Refresh post action
+            #self.renderer.status("Refetching post and replies...")
 
-                self.offset = 0
-                self.statuses = self.client.fetchTimeline(self.timeline)
-                self.renderer.status("Post fetched, drawing...")
+            #self.offset = 0
+            #self.statuses = self.client.fetchTimeline(self.timeline)
+            #self.renderer.status("Post fetched, drawing...")
 
-                # Now, format each post into it's own component.
-                self.posts = [self.__get_post(status) for status in self.statuses]
-                self.positions = self._postIndexes()
+            # Now, format each post into it's own component.
+            #self.posts = [self.__get_post(status) for status in self.statuses]
+            #self.positions = self._postIndexes()
 
-                # Now, draw them.
-                self._draw()
-                self.renderer.status("Press '?' for help.")
+            # Now, draw them.
+            #self._draw()
+            #self.renderer.status("Press '?' for help.")
 
             return NullAction()
 
