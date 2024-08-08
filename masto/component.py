@@ -1,6 +1,6 @@
 from vtpy import Terminal
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from .action import (
     Action,
@@ -22,6 +22,7 @@ from .drawhelpers import (
 from .renderer import Renderer, SystemProperties
 from .subcomponent import (
     TimelinePost,
+    PostThreadInfo,
     FocusWrapper,
     Button,
     HorizontalSelect,
@@ -157,50 +158,28 @@ class TimelineTabsComponent(Component):
         return self.timelines[self.timeline].processInput(inputVal)
 
 
-class TimelineComponent(Component):
+class _PostDisplayComponent(Component):
     def __init__(
         self,
         renderer: Renderer,
         top: int,
         bottom: int,
-        *,
-        timeline: Timeline = Timeline.HOME,
     ) -> None:
         super().__init__(renderer, top, bottom)
 
-        # Save params we care about.
-        self.timeline = timeline
-
         # First, fetch the timeline.
-        self.offset = 0
-        self.statuses = self.client.fetchTimeline(self.timeline)
-        self.renderer.status("Timeline fetched, drawing...")
-
-        # Now, format each post into it's own component.
-        self.posts = [self.__get_post(status) for status in self.statuses]
-
-        # Keep track of the top of each post, and it's post number, so we can
-        # render deep-dive numbers.
+        self.offset: int = 0
+        self.posts: List[TimelinePost] = []
         self.positions: Dict[int, int] = self._postIndexes()
-        self.drawn = False
 
-    def __get_post(self, status: StatusDict) -> TimelinePost:
-        post = TimelinePost(self.renderer, status)
+    def _get_post(self, status: StatusDict, threadInfo: Optional[PostThreadInfo] = None) -> TimelinePost:
+        post = TimelinePost(self.renderer, status, threadInfo)
         if self.properties["prefs"].get('reading:expand:spoilers', False):
             # Auto-expand any spoilered text.
             post.toggle_spoiler()
         return post
 
-    def draw(self) -> None:
-        self.__draw()
-        if not self.drawn:
-            self.drawn = True
-            if self.properties.get('last_post'):
-                self.renderer.status("New status posted! Press '?' for help.")
-            else:
-                self.renderer.status("Press '?' for help.")
-
-    def __draw(self) -> Optional[Tuple[int, int]]:
+    def _draw(self) -> Optional[Tuple[int, int]]:
         pos = -self.offset
         viewHeight = (self.bottom - self.top) + 1
 
@@ -341,6 +320,46 @@ class TimelineComponent(Component):
             pos += post.height
 
         return None
+
+    def processInput(self, inputVal: bytes) -> Optional[Action]:
+        raise NotImplementedError("This isn't meant to be implemented here!")
+
+
+class TimelineComponent(_PostDisplayComponent):
+    def __init__(
+        self,
+        renderer: Renderer,
+        top: int,
+        bottom: int,
+        *,
+        timeline: Timeline = Timeline.HOME,
+    ) -> None:
+        super().__init__(renderer, top, bottom)
+
+        # Save params we care about.
+        self.timeline = timeline
+
+        # First, fetch the timeline.
+        self.offset = 0
+        self.statuses = self.client.fetchTimeline(self.timeline)
+        self.renderer.status("Timeline fetched, drawing...")
+
+        # Now, format each post into it's own component.
+        self.posts = [self._get_post(status) for status in self.statuses]
+
+        # Keep track of the top of each post, and it's post number, so we can
+        # render deep-dive numbers.
+        self.positions = self._postIndexes()
+        self.drawn: bool = False
+
+    def draw(self) -> None:
+        self._draw()
+        if not self.drawn:
+            self.drawn = True
+            if self.properties.get('last_post'):
+                self.renderer.status("New status posted! Press '?' for help.")
+            else:
+                self.renderer.status("Press '?' for help.")
 
     def processInput(self, inputVal: bytes) -> Optional[Action]:
         infiniteScrollFetch = False
@@ -494,7 +513,7 @@ class TimelineComponent(Component):
                     # We must redraw the whole screen.
                     self.offset = 0
                     self.positions = self._postIndexes()
-                    self.__draw()
+                    self._draw()
 
             handled = True
 
@@ -508,11 +527,11 @@ class TimelineComponent(Component):
             self.renderer.status("Timeline fetched, drawing...")
 
             # Now, format each post into it's own component.
-            self.posts = [self.__get_post(status) for status in self.statuses]
+            self.posts = [self._get_post(status) for status in self.statuses]
             self.positions = self._postIndexes()
 
             # Now, draw them.
-            self.__draw()
+            self._draw()
             self.renderer.status("Press '?' for help.")
 
             return NullAction()
@@ -575,7 +594,7 @@ class TimelineComponent(Component):
                     self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
                 else:
                     # We must redraw the whole screen.
-                    self.__draw()
+                    self._draw()
 
             handled = True
 
@@ -646,7 +665,7 @@ class TimelineComponent(Component):
                     self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
                 else:
                     # We must redraw the whole screen.
-                    possibleLineList = self.__draw()
+                    possibleLineList = self._draw()
                     if possibleLineList is not None:
                         start, end = possibleLineList
                         for line in range(start, end + 1):
@@ -670,7 +689,7 @@ class TimelineComponent(Component):
             self.renderer.status("Additional posts fetched, drawing...")
 
             # Now, format each post into it's own component.
-            newPosts = [self.__get_post(status) for status in newStatuses]
+            newPosts = [self._get_post(status) for status in newStatuses]
 
             self.statuses += newStatuses
             self.posts += newPosts
@@ -685,6 +704,456 @@ class TimelineComponent(Component):
             self.renderer.status("Press '?' for help.")
 
         return NullAction()
+
+
+class PostViewComponent(_PostDisplayComponent):
+    def __init__(
+        self,
+        renderer: Renderer,
+        top: int,
+        bottom: int,
+        *,
+        postId: int = 0,
+    ) -> None:
+        super().__init__(renderer, top, bottom)
+
+        # Save params we care about.
+        self.postId = postId
+
+        # First, fetch the timeline.
+        self.post = self.client.fetchPostAndRelated(self.postId)
+        self.renderer.status("Post fetched, drawing...")
+
+        # Now, format each post into it's own component.
+        self.posts = self._get_posts(self.post)
+        self.offset = 0
+
+        # Keep track of the top of each post, and it's post number, so we can
+        # render deep-dive numbers.
+        self.positions = self._postIndexes()
+        self.drawn: bool = False
+
+    def _is_single_thread(self, post: StatusDict) -> bool:
+        if len(post['replies']) == 0:
+            return True
+        if len(post['replies']) >= 2:
+            return False
+        return self._is_single_thread(post['replies'][0])
+
+    def _unwrap_thread(self, post: StatusDict, level: int, siblingLevels: Set[int]) -> List[TimelinePost]:
+        if post['replies']:
+            return [
+                self._get_post(
+                    post,
+                    PostThreadInfo(
+                        level,
+                        False,  # highlight
+                        True,  # hasDescendants
+                        True,  # hasAncestors
+                        False,  # hasParent
+                        False,  # hasSiblings
+                        siblingLevels,
+                    ),
+                ),
+                *self._unwrap_thread(post['replies'][0], level, siblingLevels),
+            ]
+        else:
+            return [
+                self._get_post(
+                    post,
+                    PostThreadInfo(
+                        level,
+                        False,  # highlight
+                        False,  # hasDescendants
+                        True,  # hasAncestors
+                        False,  # hasParent
+                        False,  # hasSiblings
+                        siblingLevels,
+                    ),
+                )
+            ]
+
+    def _stack_thread(self, posts: List[StatusDict], level: int, siblingLevels: Set[int]) -> List[TimelinePost]:
+        displayables: List[TimelinePost] = []
+
+        last = len(posts) - 1
+        for pos, post in enumerate(posts):
+            hasSiblings = pos != last
+            displayables.append(
+                self._get_post(
+                    post,
+                    PostThreadInfo(
+                        level,
+                        False,  # highlight
+                        bool(post['replies']),  # hasDescendants
+                        False,  # hasAncestors
+                        True,  # hasParent
+                        hasSiblings,  # hasSiblings
+                        siblingLevels,
+                    ),
+                )
+            )
+
+            if hasSiblings:
+                newLevels = {level, *siblingLevels}
+            else:
+                newLevels = siblingLevels
+
+            if post['replies']:
+                if self._is_single_thread(post):
+                    displayables += self._unwrap_thread(post['replies'][0], level, newLevels)
+                else:
+                    displayables += self._stack_thread(post['replies'], level + 1, newLevels)
+
+        return displayables
+
+    def _get_posts(self, post: StatusDict) -> List[TimelinePost]:
+        posts: List[TimelinePost] = []
+
+        # First, handle any ancestors.
+        postHasAncestors = False
+        postHasDescendants = bool(post['replies'])
+
+        if post['ancestors']:
+            postHasAncestors = True
+            for a in post['ancestors']:
+                posts.append(
+                    self._get_post(
+                        post,
+                        PostThreadInfo(
+                            0,
+                            False,  # highlight
+                            True,  # has descendants.
+                            bool(posts),  # has ancestors.
+                            False,  # has parent.
+                            False,  # has siblings.
+                            set(),
+                        ),
+                    )
+                )
+
+        posts.append(
+            self._get_post(
+                post,
+                PostThreadInfo(
+                    0,
+                    True,  # highlight
+                    postHasDescendants,
+                    postHasAncestors,
+                    False,  # has parent.
+                    False,  # has siblings.
+                    set(),
+                ),
+            )
+        )
+
+        if self._is_single_thread(post):
+            # Easy thing, just unwrap
+            posts += self._unwrap_thread(post['replies'][0], 0, set())
+        else:
+            # Harder thing, display stacked
+            posts += self._stack_thread(post['replies'], 1, set())
+
+        return posts
+
+    def draw(self) -> None:
+        self._draw()
+        if not self.drawn:
+            self.drawn = True
+            self.renderer.status("Press '?' for help.")
+
+    def processInput(self, inputVal: bytes) -> Optional[Action]:
+        if inputVal == Terminal.UP:
+            # Scroll up one line.
+            if self.offset > 0:
+                self.offset -= 1
+
+                newPositions = self._postIndexes()
+                postNumberRedraw = list(self.positions.values()) != list(
+                    newPositions.values()
+                )
+                self.positions = newPositions
+
+                self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+                self.terminal.moveCursor(self.top, 1)
+                self.terminal.setScrollRegion(self.top, self.bottom)
+                self.terminal.sendCommand(Terminal.MOVE_CURSOR_UP)
+                self.terminal.clearScrollRegion()
+
+                # Redraw post numbers if necessary.
+                if postNumberRedraw:
+                    for line in self.positions.keys():
+                        if line <= self.top:
+                            continue
+                        if line > self.bottom:
+                            continue
+                        self._drawOneLine(line)
+
+                self._drawOneLine(self.top)
+                self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
+
+            return NullAction()
+
+        elif inputVal == Terminal.DOWN:
+            # Scroll down one line.
+            if self.offset < 0xFFFFFFFF:
+                self.offset += 1
+
+                newPositions = self._postIndexes()
+                postNumberRedraw = list(self.positions.values()) != list(
+                    newPositions.values()
+                )
+                self.positions = newPositions
+
+                self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+                self.terminal.setScrollRegion(self.top, self.bottom)
+                self.terminal.moveCursor((self.bottom - self.top) + 1, 1)
+                self.terminal.sendCommand(Terminal.MOVE_CURSOR_DOWN)
+                self.terminal.clearScrollRegion()
+
+                # Redraw post numbers if necessary.
+                if postNumberRedraw:
+                    for line in self.positions.keys():
+                        if line < self.top:
+                            continue
+                        if line >= self.bottom:
+                            continue
+                        self._drawOneLine(line)
+
+                self._drawOneLine(self.bottom)
+                self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
+
+            return NullAction()
+
+        elif inputVal == b"q":
+            # Log back out.
+            self.properties['last_post'] = None
+            self.renderer.status("Logged out.")
+            return SwapScreenAction(
+                spawnLoginScreen,
+                server=self.properties["server"],
+                username=self.properties["username"],
+            )
+
+        elif inputVal in {b"!", b"@", b"#", b"$", b"%", b"^", b"&", b"*", b"(", b")"}:
+            postNo = {
+                b"!": 0,
+                b"@": 1,
+                b"#": 2,
+                b"$": 3,
+                b"%": 4,
+                b"^": 5,
+                b"&": 6,
+                b"*": 7,
+                b"(": 8,
+                b")": 9,
+            }[inputVal]
+
+            minpost = self.positions[min(self.positions.keys())]
+            for off, post in self.positions.items():
+                if post - minpost == postNo:
+                    # This is the right post.
+                    if self.posts[post].toggle_spoiler():
+                        # This needs redrawing.
+                        for line in range(off, off + self.posts[post].height):
+                            if line < self.top:
+                                continue
+                            if line > self.bottom:
+                                continue
+                            self._drawOneLine(line)
+
+                    break
+
+            return NullAction()
+
+        elif inputVal == b"t":
+            # Move to top of page.
+            if self.offset > 0:
+                if self.offset < (self.bottom - self.top) + 1:
+                    # We can scroll to save render time.
+                    drawAmount = self.offset
+                    self.offset = 0
+
+                    newPositions = self._postIndexes()
+                    postNumberRedraw = list(self.positions.values()) != list(
+                        newPositions.values()
+                    )
+                    self.positions = newPositions
+
+                    self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+                    self.terminal.moveCursor(self.top, 1)
+                    self.terminal.setScrollRegion(self.top, self.bottom)
+                    for _ in range(drawAmount):
+                        self.terminal.sendCommand(Terminal.MOVE_CURSOR_UP)
+                    self.terminal.clearScrollRegion()
+
+                    # Redraw post numbers if necessary.
+                    if postNumberRedraw:
+                        skippables = {x for x in range(self.top, self.top + drawAmount)}
+                        for line in self.positions.keys():
+                            if line < self.top:
+                                continue
+                            if line > self.bottom:
+                                continue
+                            if line in skippables:
+                                continue
+                            self._drawOneLine(line)
+
+                    for line in range(drawAmount):
+                        self._drawOneLine(self.top + line)
+                    self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
+                else:
+                    # We must redraw the whole screen.
+                    self.offset = 0
+                    self.positions = self._postIndexes()
+                    self._draw()
+
+            return NullAction()
+
+        elif inputVal == b"r":
+            # TODO: Refresh post!
+            if False:
+                # Refresh post action.
+                self.renderer.status("Refetching post...")
+
+                self.offset = 0
+                self.statuses = self.client.fetchTimeline(self.timeline)
+                self.renderer.status("Post fetched, drawing...")
+
+                # Now, format each post into it's own component.
+                self.posts = [self.__get_post(status) for status in self.statuses]
+                self.positions = self._postIndexes()
+
+                # Now, draw them.
+                self._draw()
+                self.renderer.status("Press '?' for help.")
+
+            return NullAction()
+
+        elif inputVal == b"p":
+            # Move to previous post.
+            postAndOffset = self._getPostForLine(self.top)
+            whichPost = int(postAndOffset)
+            if postAndOffset - whichPost == 0.0:
+                # We're on the top line of the current post, grab the previous.
+                whichPost -= 1
+            if whichPost < 0:
+                whichPost = 0
+
+            # Figure out how much we have to move to get there.
+            newOffset = self._getLineForPost(whichPost)
+            if newOffset is not None:
+                moveAmount = self.offset - (newOffset - self.top)
+            else:
+                moveAmount = 0
+
+            if moveAmount > 0:
+                self.offset -= moveAmount
+
+                newPositions = self._postIndexes()
+                postNumberRedraw = list(self.positions.values()) != list(
+                    newPositions.values()
+                )
+                self.positions = newPositions
+
+                if moveAmount <= (self.bottom - self.top):
+                    # We can scroll to save render time.
+                    self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+                    self.terminal.moveCursor(self.top, 1)
+                    self.terminal.setScrollRegion(self.top, self.bottom)
+                    for _ in range(moveAmount):
+                        self.terminal.sendCommand(Terminal.MOVE_CURSOR_UP)
+                    self.terminal.clearScrollRegion()
+
+                    # Redraw post numbers if necessary.
+                    if postNumberRedraw:
+                        skippables = {x for x in range(self.top, self.top + moveAmount)}
+                        for line in self.positions.keys():
+                            if line < self.top:
+                                continue
+                            if line > self.bottom:
+                                continue
+                            if line in skippables:
+                                continue
+                            self._drawOneLine(line)
+
+                    for line in range(moveAmount):
+                        self._drawOneLine(self.top + line)
+                    self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
+                else:
+                    # We must redraw the whole screen.
+                    self._draw()
+
+            return NullAction()
+
+        elif inputVal == b"n":
+            # Move to next post.
+            postAndOffset = self._getPostForLine(self.top)
+            whichPost = int(postAndOffset) + 1
+
+            if whichPost == len(self.posts) and whichPost > 0:
+                # Possibly scrolling to the next entry that hasn't been fetched.
+                newOffset = self._getLineForPost(whichPost - 1)
+                if newOffset is None:
+                    raise Exception(
+                        "Logic error, should always be able to get a line for an existing post."
+                    )
+                newOffset += self.posts[whichPost - 1].height
+            else:
+                # Figure out how much we have to move to get there.
+                newOffset = self._getLineForPost(whichPost)
+
+            if newOffset is not None:
+                moveAmount = (newOffset - self.top) - self.offset
+            else:
+                moveAmount = 0
+
+            if moveAmount > 0:
+                self.offset += moveAmount
+
+                newPositions = self._postIndexes()
+                postNumberRedraw = list(self.positions.values()) != list(
+                    newPositions.values()
+                )
+                self.positions = newPositions
+
+                if moveAmount <= (self.bottom - self.top):
+                    # We can scroll to save render time.
+                    self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+                    self.terminal.setScrollRegion(self.top, self.bottom)
+                    self.terminal.moveCursor((self.bottom - self.top) + 1, 1)
+                    for _ in range(moveAmount):
+                        self.terminal.sendCommand(Terminal.MOVE_CURSOR_DOWN)
+                    self.terminal.clearScrollRegion()
+
+                    # Redraw post numbers if necessary.
+                    if postNumberRedraw:
+                        skippables = {
+                            x
+                            for x in range(
+                                self.bottom - (moveAmount - 1), self.bottom + 1
+                            )
+                        }
+                        for line in self.positions.keys():
+                            if line < self.top:
+                                continue
+                            if line > self.bottom:
+                                continue
+                            if line in skippables:
+                                continue
+                            self._drawOneLine(line)
+
+                    for line in range(moveAmount):
+                        actualLine = (self.bottom - (moveAmount - 1)) + line
+                        self._drawOneLine(actualLine)
+                    self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
+                else:
+                    # We must redraw the whole screen.
+                    self._draw()
+
+            return NullAction()
+
+        return None
 
 
 class NewPostComponent(Component):

@@ -3,7 +3,7 @@ from abc import ABC
 from datetime import datetime
 from tzlocal import get_localzone
 
-from typing import List, Optional, Tuple
+from typing import List, Optional, Set, Tuple
 
 from vtpy import Terminal
 
@@ -33,11 +33,39 @@ from .text import (
 )
 
 
-class TimelinePost:
-    def __init__(self, renderer: "Renderer", data: StatusDict, highlighted: bool = False) -> None:
-        self.renderer = renderer
+class PostThreadInfo:
+    def __init__(
+        self,
+        level: int,
+        highlighted: bool,
+        hasDescendants: bool,
+        hasAncestors: bool,
+        hasParent: bool,
+        hasSiblings: bool,
+        siblingLevels: Set[int],
+    ) -> None:
+        self.level = level
         self.highlighted = highlighted
+        self.hasDescendants = hasDescendants
+        self.hasAncestors = hasAncestors
+        self.hasParent = hasParent
+        self.hasSiblings = hasSiblings
+        self.siblingLevels = siblingLevels
+
+
+class TimelinePost:
+    def __init__(self, renderer: "Renderer", data: StatusDict, threadInfo: Optional[PostThreadInfo] = None) -> None:
+        self.renderer = renderer
         self.data = data
+        self.threadInfo = threadInfo or PostThreadInfo(
+            0,
+            False,
+            False,
+            False,
+            False,
+            False,
+            set(),
+        )
 
         reblog = self.data["reblog"]
         if reblog:
@@ -144,9 +172,9 @@ class TimelinePost:
 
         # Now, surround the post in a box.
         return [
-            boxtop(self.renderer.columns, bold=self.highlighted),
-            *[boxmiddle(line, self.renderer.columns, bold=self.highlighted) for line in textlines],
-            replace(boxbottom(self.renderer.columns, bold=self.highlighted), self.stats, offset=-2),
+            boxtop(self.renderer.columns, bold=self.threadInfo.highlighted),
+            *[boxmiddle(line, self.renderer.columns, bold=self.threadInfo.highlighted) for line in textlines],
+            replace(boxbottom(self.renderer.columns, bold=self.threadInfo.highlighted), self.stats, offset=-2),
         ]
 
     def __format_stats(
@@ -223,7 +251,7 @@ class TimelinePost:
             postText = f"\u2524{postno}\u251c"
         else:
             postText = "\u2500\u2500\u2500"
-        self.lines[0] = replace(self.lines[0], postText, offset=2)
+        self.lines[0] = replace(self.lines[0], postText, offset=3)
 
         bounds = BoundingRectangle(
             top=top, bottom=bottom + 1, left=1, right=self.renderer.columns + 1
