@@ -757,7 +757,11 @@ class PostViewComponent(_PostDisplayComponent):
         # Save params we care about.
         self.postId = postId
 
-        # First, fetch the timeline.
+        # Fetch the post and calculate random stuff about it.
+        self._fetchPostFromId()
+        self.drawn: bool = False
+
+    def _fetchPostFromId(self) -> None:
         self.post = self.client.fetchPostAndRelated(self.postId)
         self.renderer.status("Post fetched, drawing...")
 
@@ -769,7 +773,6 @@ class PostViewComponent(_PostDisplayComponent):
         # Keep track of the top of each post, and it's post number, so we can
         # render deep-dive numbers.
         self.positions = self._postIndexes()
-        self.drawn: bool = False
 
     def _is_single_thread(self, post: StatusDict) -> bool:
         if len(post['replies']) == 0:
@@ -1086,20 +1089,13 @@ class PostViewComponent(_PostDisplayComponent):
             return BackAction()
 
         elif inputVal == b"r":
-            # TODO: Refresh post action
-            #self.renderer.status("Refetching post and replies...")
-
-            #self.offset = 0
-            #self.statuses = self.client.fetchTimeline(self.timeline)
-            #self.renderer.status("Post fetched, drawing...")
-
-            # Now, format each post into it's own component.
-            #self.posts = [self.__get_post(status) for status in self.statuses]
-            #self.positions = self._postIndexes()
+            # Refresh post action
+            self.renderer.status("Refetching post and replies...")
+            self._fetchPostFromId()
 
             # Now, draw them.
-            #self._draw()
-            #self.renderer.status("Press '?' for help.")
+            self._draw()
+            self.renderer.status("Press '?' for help.")
 
             return NullAction()
 
