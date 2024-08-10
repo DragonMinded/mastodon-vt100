@@ -184,7 +184,7 @@ class TimelinePost:
 
         # Now, if this is highlighted, display that.
         if self.threadInfo.highlighted:
-            highlightText = "\u2524current\u251c"
+            highlightText = highlight("\u2524<b>current</b>\u251c")
             formattedlines[0] = replace(formattedlines[0], highlightText, offset=7 + (3 * self.threadInfo.level))
 
         # Now, decorate the box with any sort of threading indicators.
