@@ -103,18 +103,22 @@ class TimelineTabsComponent(Component):
         return "".join(
             [
                 "<u>Timeline Selection</u><br />",
-                "<p><b>h</b> view your home timeline</p>",
-                "<p><b>l</b> view your local instance timeline</p>",
-                "<p><b>g</b> view the global timeline</p>",
+                "<b>h</b> view your home timeline<br />",
+                "<b>l</b> view your local instance timeline<br />",
+                "<b>g</b> view the global timeline<br />",
+                "<br />",
                 "<u>Navigation</u><br />",
-                "<p><b>up</b> and <b>down</b> keys scroll the timeline up or down one single line.</p>",
-                "<p><b>n</b> scrolls until the next post is at the top of the screen.</p>",
-                "<p><b>p</b> scrolls until the previous post is at the top of the screen.</p>",
-                "<p><b>t</b> scrolls to the top of the timeline.</p>",
+                "<b>[up]</b> and <b>[down]</b> keys scroll the timeline up or down one single line.<br />",
+                "<b>n</b> scrolls until the next post is at the top of the screen.<br />",
+                "<b>p</b> scrolls until the previous post is at the top of the screen.<br />",
+                "<b>t</b> scrolls to the top of the timeline.<br />",
+                "<br />",
                 "<u>Actions</u><br />",
-                "<p><b>r</b> refreshes the timeline, scrolling to the top of the refreshed content.</p>",
-                "<p><b>c</b> opens up the composer to write a new post.</p>",
-                "<p><b>q</b> quits to the login screen.</p>",
+                "<b>r</b> refreshes the timeline, scrolling to the top of the refreshed content.<br />",
+                "<b>c</b> opens up the composer to write a new post.<br />",
+                "<b>0</b>-<b>9</b> loads thread view for a numbered post, displaying replies.<br />",
+                "<b>[shift]</b>+<b>0</b>-<b>9</b> toggles CW'd text for a numbered post.<br />",
+                "<b>q</b> quits to the login screen.<br />",
             ]
         )
 
@@ -761,6 +765,25 @@ class PostViewComponent(_PostDisplayComponent):
         self._fetchPostFromId()
         self.drawn: bool = False
 
+    def __get_help(self) -> str:
+        return "".join(
+            [
+                "<u>Navigation</u><br />",
+                "<b>[up]</b> and <b>[down]</b> keys scroll the thread up or down one single line.<br />",
+                "<b>n</b> scrolls until the next post is at the top of the screen.<br />",
+                "<b>p</b> scrolls until the previous post is at the top of the screen.<br />",
+                "<b>t</b> scrolls to the top of the thread.<br />",
+                "<br />",
+                "<u>Actions</u><br />",
+                "<b>r</b> refreshes the thread, scrolling to the current post.<br />",
+                "<b>c</b> opens up the composer to write a reply to the current post.<br />",
+                "<b>0</b>-<b>9</b> loads thread view for a numbered post, displaying replies.<br />",
+                "<b>[shift]</b>+<b>0</b>-<b>9</b> toggles CW'd text for a numbered post.<br />",
+                "<b>b</b> goes back to the previous view.<br />",
+                "<b>q</b> quits to the login screen.<br />",
+            ]
+        )
+
     def _fetchPostFromId(self) -> None:
         self.post = self.client.fetchPostAndRelated(self.postId)
         self.renderer.status("Post fetched, drawing...")
@@ -918,7 +941,14 @@ class PostViewComponent(_PostDisplayComponent):
             self.renderer.status("Press '?' for help.")
 
     def processInput(self, inputVal: bytes) -> Optional[Action]:
-        if inputVal == Terminal.UP:
+        if inputVal == b"?":
+            # Display hotkeys action.
+            self.drawn = False
+            return SwapScreenAction(
+                spawnHTMLScreen, content=self.__get_help(), exitMessage="Drawing..."
+            )
+
+        elif inputVal == Terminal.UP:
             # Scroll up one line.
             if self.offset > 0:
                 self.offset -= 1
