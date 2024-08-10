@@ -767,8 +767,21 @@ class PostViewComponent(_PostDisplayComponent):
 
         # Now, format each post into it's own component.
         self.posts = self._get_posts(self.post)
-        self.offset = 0
         self.limit = max(0, sum([p.height for p in self.posts]) - ((self.bottom - self.top) + 1))
+
+        # Endeavor to have the current post at the top of the screen.
+        self.offset = 0
+        for post in self.posts:
+            if self._get_status_from_post(post)['id'] == self.postId:
+                break
+
+            self.offset += post.height
+        else:
+            # Somehow didn't find the highlighted post?
+            self.offset = 0
+
+        if self.offset > self.limit:
+            self.offset = self.limit
 
         # Keep track of the top of each post, and it's post number, so we can
         # render deep-dive numbers.
