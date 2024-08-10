@@ -764,6 +764,7 @@ class PostViewComponent(_PostDisplayComponent):
         # Now, format each post into it's own component.
         self.posts = self._get_posts(self.post)
         self.offset = 0
+        self.limit = max(0, sum([p.height for p in self.posts]) - ((self.bottom - self.top) + 1))
 
         # Keep track of the top of each post, and it's post number, so we can
         # render deep-dive numbers.
@@ -934,7 +935,7 @@ class PostViewComponent(_PostDisplayComponent):
 
         elif inputVal == Terminal.DOWN:
             # Scroll down one line.
-            if self.offset < 0xFFFFFFFF:
+            if self.offset < self.limit:
                 self.offset += 1
 
                 newPositions = self._postIndexes()
@@ -1159,69 +1160,75 @@ class PostViewComponent(_PostDisplayComponent):
             return NullAction()
 
         elif inputVal == b"n":
-            # Move to next post.
-            postAndOffset = self._getPostForLine(self.top)
-            whichPost = int(postAndOffset) + 1
+            # Move to next post. Unlike normal timeline view, this doesn't allow scrolling "past"
+            # the final post, since there's no infinite scroll. Instead, if your next post action
+            # would scroll past the final post, we only scroll enough to put that in focus.
+            if self.offset < self.limit:
+                postAndOffset = self._getPostForLine(self.top)
+                whichPost = int(postAndOffset) + 1
 
-            if whichPost == len(self.posts) and whichPost > 0:
-                # Possibly scrolling to the next entry that hasn't been fetched.
-                newOffset = self._getLineForPost(whichPost - 1)
-                if newOffset is None:
-                    raise Exception(
-                        "Logic error, should always be able to get a line for an existing post."
-                    )
-                newOffset += self.posts[whichPost - 1].height
-            else:
-                # Figure out how much we have to move to get there.
-                newOffset = self._getLineForPost(whichPost)
-
-            if newOffset is not None:
-                moveAmount = (newOffset - self.top) - self.offset
-            else:
-                moveAmount = 0
-
-            if moveAmount > 0:
-                self.offset += moveAmount
-
-                newPositions = self._postIndexes()
-                postNumberRedraw = list(self.positions.values()) != list(
-                    newPositions.values()
-                )
-                self.positions = newPositions
-
-                if moveAmount <= (self.bottom - self.top):
-                    # We can scroll to save render time.
-                    self.terminal.sendCommand(Terminal.SAVE_CURSOR)
-                    self.terminal.setScrollRegion(self.top, self.bottom)
-                    self.terminal.moveCursor((self.bottom - self.top) + 1, 1)
-                    for _ in range(moveAmount):
-                        self.terminal.sendCommand(Terminal.MOVE_CURSOR_DOWN)
-                    self.terminal.clearScrollRegion()
-
-                    # Redraw post numbers if necessary.
-                    if postNumberRedraw:
-                        skippables = {
-                            x
-                            for x in range(
-                                self.bottom - (moveAmount - 1), self.bottom + 1
-                            )
-                        }
-                        for line in self.positions.keys():
-                            if line < self.top:
-                                continue
-                            if line > self.bottom:
-                                continue
-                            if line in skippables:
-                                continue
-                            self._drawOneLine(line)
-
-                    for line in range(moveAmount):
-                        actualLine = (self.bottom - (moveAmount - 1)) + line
-                        self._drawOneLine(actualLine)
-                    self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
+                if whichPost == len(self.posts) and whichPost > 0:
+                    # Possibly scrolling to the next entry that hasn't been fetched.
+                    newOffset = self._getLineForPost(whichPost - 1)
+                    if newOffset is None:
+                        raise Exception(
+                            "Logic error, should always be able to get a line for an existing post."
+                        )
+                    newOffset += self.posts[whichPost - 1].height
                 else:
-                    # We must redraw the whole screen.
-                    self._draw()
+                    # Figure out how much we have to move to get there.
+                    newOffset = self._getLineForPost(whichPost)
+
+                if newOffset is not None:
+                    moveAmount = (newOffset - self.top) - self.offset
+                else:
+                    moveAmount = 0
+
+                if self.offset + moveAmount >= self.limit:
+                    moveAmount = self.limit - self.offset
+
+                if moveAmount > 0:
+                    self.offset += moveAmount
+
+                    newPositions = self._postIndexes()
+                    postNumberRedraw = list(self.positions.values()) != list(
+                        newPositions.values()
+                    )
+                    self.positions = newPositions
+
+                    if moveAmount <= (self.bottom - self.top):
+                        # We can scroll to save render time.
+                        self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+                        self.terminal.setScrollRegion(self.top, self.bottom)
+                        self.terminal.moveCursor((self.bottom - self.top) + 1, 1)
+                        for _ in range(moveAmount):
+                            self.terminal.sendCommand(Terminal.MOVE_CURSOR_DOWN)
+                        self.terminal.clearScrollRegion()
+
+                        # Redraw post numbers if necessary.
+                        if postNumberRedraw:
+                            skippables = {
+                                x
+                                for x in range(
+                                    self.bottom - (moveAmount - 1), self.bottom + 1
+                                )
+                            }
+                            for line in self.positions.keys():
+                                if line < self.top:
+                                    continue
+                                if line > self.bottom:
+                                    continue
+                                if line in skippables:
+                                    continue
+                                self._drawOneLine(line)
+
+                        for line in range(moveAmount):
+                            actualLine = (self.bottom - (moveAmount - 1)) + line
+                            self._drawOneLine(actualLine)
+                        self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
+                    else:
+                        # We must redraw the whole screen.
+                        self._draw()
 
             return NullAction()
 
