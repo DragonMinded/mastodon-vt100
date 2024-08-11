@@ -2,7 +2,7 @@ import argparse
 import sys
 import time
 
-from vtpy import SerialTerminal, Terminal, TerminalException
+from vtpy import SerialTerminal, STDIOTerminal, Terminal, TerminalException
 
 from .action import BackAction, ExitAction, SwapScreenAction
 from .client import Client
@@ -10,21 +10,43 @@ from .component import spawnLoginScreen, spawnErrorScreen
 from .renderer import Renderer
 
 
-def spawnTerminal(port: str, baudrate: int, flow: bool, wide: bool) -> Terminal:
+def __prepTerminal(terminal: Terminal, wide: bool) -> None:
+    if wide:
+        terminal.set132Columns()
+    else:
+        terminal.set80Columns()
+
+    terminal.sendCommand(Terminal.TURN_OFF_WRAP_FORWARD_MODE)
+    terminal.sendCommand(Terminal.TURN_OFF_WRAP_BACKWARD_MODE)
+
+
+def spawnSerialTerminal(port: str, baudrate: int, flow: bool, wide: bool) -> Terminal:
     print("Attempting to contact VT-100...", end="", file=sys.stderr)
     sys.stderr.flush()
 
     while True:
         try:
             terminal = SerialTerminal(port, baudrate, flowControl=flow)
+            __prepTerminal(terminal, wide)
 
-            if wide:
-                terminal.set132Columns()
-            else:
-                terminal.set80Columns()
+            print("SUCCESS!", file=sys.stderr)
+            return terminal
+        except TerminalException:
+            # Wait for terminal to re-awaken.
+            time.sleep(1.0)
 
-            terminal.sendCommand(Terminal.TURN_OFF_WRAP_FORWARD_MODE)
-            terminal.sendCommand(Terminal.TURN_OFF_WRAP_BACKWARD_MODE)
+            print(".", end="", file=sys.stderr)
+            sys.stderr.flush()
+
+
+def spawnStdioTerminal(wide: bool) -> Terminal:
+    print("Attempting to contact VT-100...", end="", file=sys.stderr)
+    sys.stderr.flush()
+
+    while True:
+        try:
+            terminal = STDIOTerminal()
+            __prepTerminal(terminal, wide)
 
             print("SUCCESS!", file=sys.stderr)
             return terminal
@@ -43,6 +65,7 @@ def main(
     port: str,
     baudrate: int,
     flow: bool,
+    use_stdio: bool,
     wide: bool,
 ) -> int:
     # First, attempt to talk to the server.
@@ -51,7 +74,10 @@ def main(
     exiting = False
     while not exiting:
         # First, attempt to talk to the terminal, and get the current page rendering.
-        terminal = spawnTerminal(port, baudrate, flow, wide)
+        if use_stdio:
+            terminal = spawnStdioTerminal(wide)
+        else:
+            terminal = spawnSerialTerminal(port, baudrate, flow, wide)
         renderer = Renderer(terminal, client)
         if client.valid:
             spawnLoginScreen(
@@ -118,6 +144,12 @@ def cli() -> None:
         help="Enable software-based flow control (XON/XOFF)",
     )
     parser.add_argument(
+        "--stdio",
+        default=False,
+        action="store_true",
+        help="Talk to stdin/stdout instead of a serial port",
+    )
+    parser.add_argument(
         "--wide",
         action="store_true",
         help="Enable wide mode (132 characters instead of 80 characters)",
@@ -154,6 +186,7 @@ def cli() -> None:
             args.port,
             args.baud,
             args.flow,
+            args.stdio,
             args.wide,
         )
     )
