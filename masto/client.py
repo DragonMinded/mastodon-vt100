@@ -51,6 +51,13 @@ class AccountInfoDict(TypedDict):
     display_name: str
 
 
+class AccountMentionDict(TypedDict):
+    id: int
+    url: str
+    username: str
+    acct: str
+
+
 class MediaDict(TypedDict):
     # Incomplete, there's a ton more on mastodon.py that I haven't put here yet.
     id: int
@@ -73,6 +80,7 @@ class StatusDict(TypedDict):
     created_at: datetime
     ancestors: List["StatusDict"]
     replies: List["StatusDict"]
+    mentions: List[AccountMentionDict]
     replies_count: int
     reblogs_count: int
     favourites_count: int
@@ -80,6 +88,7 @@ class StatusDict(TypedDict):
     reblogged: bool
     muted: bool
     bookmarked: bool
+    visibility: Optional[str]
 
 
 class RelatedDict(TypedDict):
@@ -265,7 +274,7 @@ class Client:
             return cast(AccountInfoDict, self.__client.me())
 
     def createPost(
-        self, status: str, visibility: Visibility, *, cw: Optional[str] = None
+        self, status: str, visibility: Visibility, *, inReplyTo: Optional[StatusDict] = None, cw: Optional[str] = None
     ) -> StatusDict:
         self.__assert_valid()
 
@@ -282,5 +291,5 @@ class Client:
 
         return cast(
             StatusDict,
-            self.__client.status_post(status, visibility=visStr, spoiler_text=cw),
+            self.__client.status_post(status, visibility=visStr, spoiler_text=cw, in_reply_to_id=inReplyTo),
         )

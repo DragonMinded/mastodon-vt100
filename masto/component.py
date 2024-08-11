@@ -116,6 +116,7 @@ class TimelineTabsComponent(Component):
                 "<u>Actions</u><br />",
                 "<b>r</b> refreshes the timeline, scrolling to the top of the refreshed content.<br />",
                 "<b>c</b> opens up the composer to write a new post.<br />",
+                "<b>v</b> opens up thread view on the last-posted status.<br />",
                 "<b>0</b>-<b>9</b> loads thread view for a numbered post, displaying replies.<br />",
                 "<b>[shift]</b>+<b>0</b>-<b>9</b> toggles CW'd text for a numbered post.<br />",
                 "<b>q</b> quits to the login screen.<br />",
@@ -367,7 +368,7 @@ class TimelineComponent(_PostDisplayComponent):
         if not self.drawn:
             self.drawn = True
             if self.properties.get('last_post'):
-                self.renderer.status("New status posted! Press '?' for help.")
+                self.renderer.status("New status posted! Press 'v' to view. Press '?' for help.")
             else:
                 self.renderer.status("Press '?' for help.")
 
@@ -452,6 +453,13 @@ class TimelineComponent(_PostDisplayComponent):
                 username=self.properties["username"],
             )
 
+        elif inputVal == b"v":
+            if self.properties.get('last_post'):
+                self.renderer.status("Fetching post and replies...")
+                return SwapScreenAction(spawnPostAndRepliesScreen, post=self.properties['last_post'])
+
+            return NullAction()
+
         elif inputVal in {b"1", b"2", b"3", b"4", b"5", b"6", b"7", b"8", b"9", b"0"}:
             postNo = {
                 b"1": 0,
@@ -476,6 +484,7 @@ class TimelineComponent(_PostDisplayComponent):
                     status = self.statuses[post]
 
                     self.renderer.status("Fetching post and replies...")
+                    self.properties['last_post'] = None
                     return SwapScreenAction(spawnPostAndRepliesScreen, post=status)
 
             return NullAction()
@@ -942,6 +951,13 @@ class PostViewComponent(_PostDisplayComponent):
         return posts
 
     def draw(self) -> None:
+        # If we're redrawing and there is a last post, it means we just replied. So, replace
+        # our view with this new one and load it before drawing.
+        if self.properties.get('last_post'):
+            self.postId = self.properties['last_post']['id']  # type: ignore
+            self.properties['last_post'] = None
+            self._fetchPostFromId()
+
         self._draw()
         if not self.drawn:
             self.drawn = True
@@ -1019,13 +1035,18 @@ class PostViewComponent(_PostDisplayComponent):
 
         elif inputVal == b"q":
             # Log back out.
-            self.properties['last_post'] = None
             self.renderer.status("Logged out.")
             return SwapScreenAction(
                 spawnLoginScreen,
                 server=self.properties["server"],
                 username=self.properties["username"],
             )
+
+        elif inputVal == b"c":
+            # Post a new reply action.
+            self.drawn = False
+            self.properties['last_post'] = None
+            return SwapScreenAction(spawnPostScreen, replyTo=self.post, exitMessage="Drawing...")
 
         elif inputVal in {b"1", b"2", b"3", b"4", b"5", b"6", b"7", b"8", b"9", b"0"}:
             postNo = {
@@ -1282,37 +1303,82 @@ class PostViewComponent(_PostDisplayComponent):
 
 
 class NewPostComponent(Component):
-    def __init__(self, renderer: Renderer, top: int, bottom: int, exitMessage: str = "") -> None:
+    def __init__(self, renderer: Renderer, top: int, bottom: int, inReplyTo: Optional[StatusDict] = None, exitMessage: str = "") -> None:
         super().__init__(renderer, top, bottom)
 
         self.exitMessage = exitMessage
+        self.inReplyTo = inReplyTo
 
         # Figure out their default posting preference.
         server_pref = self.properties["prefs"].get('posting:default:visibility', 'public')
+        if inReplyTo:
+            postVisibility = inReplyTo['visibility'] or 'public'
+            if postVisibility == 'public':
+                # In this case, we let the server pref win out.
+                postVisibility = server_pref
+            elif postVisibility == 'unlisted':
+                # In this case, we let the server pref win out unless it was public.
+                if server_pref not in {'public'}:
+                    postVisibility = server_pref
+            elif postVisibility == 'private':
+                # In this case, we let the server pref win out unless it was public/unlisted.
+                if server_pref not in {'public', 'unlisted'}:
+                    postVisibility = server_pref
+            elif postVisibility == 'direct':
+                # In this case, we're as private as we can get, so server pref is irrelevant.
+                pass
+        else:
+            # No reply, so post visibility IS the server pref.
+            postVisibility = server_pref
+
         default_visibility: Optional[str] = {
             'public': "public",
             'unlisted': "quiet public",
             'private': "followers",
-        }.get(server_pref)
+        }.get(postVisibility)
 
         self.component = 0
 
+        # For replies, start with the input box replying to participants.
+        if inReplyTo:
+            accounts: List[str] = []
+            ignored: List[int] = [inReplyTo['account']['id'], self.properties['account']['id']]
+            if inReplyTo['account']['id'] != self.properties['account']['id']:
+                accounts.append(inReplyTo['account']['acct'])
+
+            for acct in inReplyTo['mentions'] or []:
+                if acct['id'] not in ignored:
+                    accounts.append(acct['acct'])
+                    ignored.append(acct['id'])
+
+            postText = " ".join(f"@{a}" for a in accounts)
+            if postText:
+                postText += " "
+        else:
+            postText = ""
         self.postBody = MultiLineInputBox(
-            renderer, "", self.top + 2, 2, self.renderer.columns - 2, 10
+            renderer, postText, self.top + 2, 2, self.renderer.columns - 2, 10
         )
+
+        # Match the CW from a reply if it is present.
+        if inReplyTo:
+            cwText = inReplyTo['spoiler_text'] or ""
+        else:
+            cwText = ""
         self.cw = OneLineInputBox(
-            renderer, "", self.top + 13, 2, self.renderer.columns - 2
+            renderer, cwText, self.top + 13, 2, self.renderer.columns - 2
         )
+
         self.visibility = HorizontalSelect(
             renderer,
             ["public", "quiet public", "followers", "specific accounts"],
             self.top + 14,
-            19,
+            20 if inReplyTo else 19,
             25,
             selected=default_visibility,
         )
-        self.post = Button(renderer, "Post", self.top + 17, 2)
-        self.discard = Button(renderer, "Discard", self.top + 17, 9)
+        self.post = Button(renderer, "Reply" if inReplyTo else "Post", self.top + 17, 2)
+        self.discard = Button(renderer, "Discard", self.top + 17, 10 if inReplyTo else 9)
         self.focusWrapper = FocusWrapper(
             [self.postBody, self.cw, self.visibility, self.post, self.discard], 0
         )
@@ -1324,11 +1390,11 @@ class NewPostComponent(Component):
         lines.append(
             join(
                 [
-                    highlight("Posting as "),
+                    highlight("Replying as " if self.inReplyTo else "Posting as "),
                     account(
                         self.properties["account"]["display_name"],
                         self.properties["account"]["username"],
-                        self.renderer.columns - 13,
+                        self.renderer.columns - (14 if self.inReplyTo else 13),
                     ),
                 ]
             )
@@ -1341,9 +1407,9 @@ class NewPostComponent(Component):
 
         # Now, add the post visibility selection.
         visibilityLines = self.visibility.lines
-        lines.append(join([highlight(" " * 17), visibilityLines[0]]))
-        lines.append(join([highlight("Post Visibility: "), visibilityLines[1]]))
-        lines.append(join([highlight(" " * 17), visibilityLines[2]]))
+        lines.append(join([highlight(" " * (18 if self.inReplyTo else 17)), visibilityLines[0]]))
+        lines.append(join([highlight("Reply Visibility: " if self.inReplyTo else "Post Visibility: "), visibilityLines[1]]))
+        lines.append(join([highlight(" " * (18 if self.inReplyTo else 17)), visibilityLines[2]]))
 
         # Now, add the post and discard buttons.
         postLines = self.post.lines
@@ -1439,7 +1505,7 @@ class NewPostComponent(Component):
                 else:
                     raise Exception("Logic error, couldn't map visibility!")
 
-                self.properties['last_post'] = self.client.createPost(status, visibility, cw=cw)
+                self.properties['last_post'] = self.client.createPost(status, visibility, inReplyTo=self.inReplyTo, cw=cw)
                 self.renderer.status("New status posted! Drawing...")
 
                 # Go back now, once post was successfully posted.
@@ -1810,8 +1876,8 @@ def spawnPostAndRepliesScreen(
     renderer.push([PostViewComponent(renderer, top=1, bottom=renderer.rows, postId=post['id'] if post else 0)])
 
 
-def spawnPostScreen(renderer: Renderer, exitMessage: str = "") -> None:
-    renderer.push([NewPostComponent(renderer, top=1, bottom=renderer.rows, exitMessage=exitMessage)])
+def spawnPostScreen(renderer: Renderer, replyTo: Optional[StatusDict] = None, exitMessage: str = "") -> None:
+    renderer.push([NewPostComponent(renderer, top=1, bottom=renderer.rows, inReplyTo=replyTo, exitMessage=exitMessage)])
 
 
 def spawnHTMLScreen(

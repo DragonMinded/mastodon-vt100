@@ -15,7 +15,7 @@ Right now this is a fairly rudimentary client. The following features are presen
 
 What doesn't work that I would like to get to at some point:
 
-- Ability to reply to, edit and delete posts instead of only posting to your own timeline.
+- Ability to edit and delete previously-posted statuses.
 - Ability to like or boost a post from the focus view.
 - Ability to bookmark a post from the focus view, ability to view bookmarked posts.
 - User profile view with profile, pinned posts and user timeline display.
