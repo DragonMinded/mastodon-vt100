@@ -779,7 +779,7 @@ class PostViewComponent(_PostDisplayComponent):
                 "<b>c</b> opens up the composer to write a reply to the current post.<br />",
                 "<b>0</b>-<b>9</b> loads thread view for a numbered post, displaying replies.<br />",
                 "<b>[shift]</b>+<b>0</b>-<b>9</b> toggles CW'd text for a numbered post.<br />",
-                "<b>b</b> goes back to the previous view.<br />",
+                "<b>[left]</b> or <b>[backspace]</b> goes back to the previous view.<br />",
                 "<b>q</b> quits to the login screen.<br />",
             ]
         )
@@ -1127,7 +1127,7 @@ class PostViewComponent(_PostDisplayComponent):
 
             return NullAction()
 
-        elif inputVal == b"b":
+        elif inputVal in {Terminal.LEFT, Terminal.BACKSPACE}:
             # Go back to timeline view.
             return BackAction()
 
@@ -1730,7 +1730,7 @@ class HTMLComponent(Component):
 
     def draw(self) -> None:
         # Fill in the lines so we can blank the screen.
-        self.renderer.status("Press 'b' to go back to the previous screen.")
+        self.renderer.status("Press [left] or [backspace] to go back to the previous screen.")
         for line in range(self.top, self.bottom + 1):
             self.renderer.terminal.moveCursor(line, 1)
             self.renderer.terminal.sendCommand(Terminal.CLEAR_LINE)
@@ -1748,7 +1748,7 @@ class HTMLComponent(Component):
         self.renderer.terminal.moveCursor(self.bottom, self.renderer.columns)
 
     def processInput(self, inputVal: bytes) -> Optional[Action]:
-        if inputVal == b"b":
+        if inputVal in {Terminal.LEFT, Terminal.BACKSPACE}:
             # Go back to the previous page.
             if self.exitMessage:
                 self.renderer.status(self.exitMessage)
