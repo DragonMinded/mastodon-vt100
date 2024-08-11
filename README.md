@@ -10,15 +10,15 @@ Right now this is a fairly rudimentary client. The following features are presen
 - Home, local and public timelines, including rendering alt-text and CW text display toggling.
 - Infinite scroll, where additional posts are fetched when you hit the bottom of a timeline.
 - Composer box, supporting the ability to post with an optional CW and choosing the visibility.
+- Individual post/thread view, supporting the ability to edit/delete your own posts, and ability to interact with other posts.
 - Preference respecting for CW auto-expansion and composer default post visibility.
 
 What doesn't work that I would like to get to at some point:
 
-- Post focus view, showing ancestors and descendant replies.
-- Ability to reply to posts instead of only posting to your own timeline.
-- User profile view.
+- Ability to reply to, edit and delete posts instead of only posting to your own timeline.
 - Ability to like or boost a post from the focus view.
 - Ability to bookmark a post from the focus view, ability to view bookmarked posts.
+- User profile view with profile, pinned posts and user timeline display.
 - Conversation/private messaging support.
 - Additional formatting support for the post renderer.
 - Asynchronous notifications using the terminal bell, notification viewer.
@@ -26,8 +26,8 @@ What doesn't work that I would like to get to at some point:
 What I may get to at some point in the future:
 
 - Ability to open hyperlinks in posts in focus view by proxying through elinks browser.
-- Post editor for previously-posted posts.
 - Settings editor for your instance-wide settings.
+- Muted/blocked words support in timeline and post views.
 
 ## Running This
 
