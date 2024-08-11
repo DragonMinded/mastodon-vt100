@@ -228,9 +228,9 @@ class TimelinePost:
 
         # Reblogs
         if self.data["reblogged"]:
-            stats.append(f"<bold>{self.data['reblogs_count']} R</bold>")
+            stats.append(f"<bold>{self.data['reblogs_count']} B</bold>")
         else:
-            stats.append(f"{self.data['reblogs_count']} R")
+            stats.append(f"{self.data['reblogs_count']} B")
 
         # Likes
         if self.data["favourited"]:
@@ -240,9 +240,9 @@ class TimelinePost:
 
         # Bookmarks
         if self.data["bookmarked"]:
-            stats.append("<bold>B</bold>")
+            stats.append("<bold>S</bold>")
         else:
-            stats.append("B")
+            stats.append("S")
 
         return highlight("\u2524" + "\u251c\u2500\u2524".join(stats) + "\u251c")
 
