@@ -125,7 +125,10 @@ def wordwrap(
         if ch in {" ", "\n"}:
             lastPunctuation = False
             wrapPoints.append(i)
-        elif ch in {"-", "+", ";", "~", "(", ")", "[", "]", "{", "}", "<", ">"}:
+        elif ch in {"-"}:
+            # List of punctuation marks that are allowed to be wrappers. Right now
+            # only the dash is included here, so parenthesis stick with their
+            # respective words.
             lastPunctuation = True
         elif ch.isalnum():
             if lastPunctuation:
@@ -477,7 +480,9 @@ class MastodonParser(HTMLParser):
             if newLine:
                 self.text += newLine
                 self.codes += [code] * len(newLine)
-        elif tag == "span":
+        elif tag in {"span", "code"}:
+            # Spans are just wrapper elements with no formatting. Code usually denotes
+            # fixed width, but we literally only can do that.
             pass
         elif tag == "br":
             # Simple, handle this by adding.
@@ -542,7 +547,7 @@ class MastodonParser(HTMLParser):
         elif tag == "u":
             # Underline it!
             self.pending = self.__ununderline_last_code()
-        elif tag in {"span", "br"}:
+        elif tag in {"span", "code", "br"}:
             pass
         elif tag in {"ul", "ol"}:
             if self.liststack:
