@@ -366,6 +366,8 @@ class MastodonParser(HTMLParser):
         self.bdepth = 0
         self.udepth = 0
         self.rdepth = 0
+        self.liststack: List[str] = []
+        self.listcount: List[int] = []
 
     def __last_code(self) -> ControlCodes:
         if self.pending:
@@ -453,6 +455,32 @@ class MastodonParser(HTMLParser):
         elif tag == "u":
             # Underline it!
             self.pending = self.__underline_last_code()
+        elif tag == "ul":
+            # Unordered list start.
+            self.liststack.append("ul")
+            self.listcount.append(0)
+        elif tag == "ol":
+            # Ordered list start.
+            self.liststack.append("ol")
+            self.listcount.append(0)
+        elif tag == "li":
+            # Check if we're ordered or unordered.
+            code = self.__last_code()
+            needsNewline = bool(self.text) and self.text[-1] != "\n"
+            newLine = "\n" if needsNewline else ""
+
+            if self.liststack and self.listcount:
+                if self.liststack[-1] == "ol":
+                    # Counted list.
+                    text = newLine + (" " * len(self.liststack)) + str(self.listcount[-1] + 1) + ". "
+                    self.codes += [code] * len(text)
+                    self.text += text
+                elif self.liststack[-1] == "ul":
+                    # Uncounted list. Add an indented middot.
+                    text = newLine + (" " * len(self.liststack)) + "\xb7 "
+                    self.codes += [code] * len(text)
+                    self.text += text
+                self.listcount[-1] += 1
         else:
             print("Unsupported start tag", tag, file=sys.stderr)
 
@@ -475,6 +503,22 @@ class MastodonParser(HTMLParser):
             # Underline it!
             self.pending = self.__ununderline_last_code()
         elif tag in {"span", "br"}:
+            pass
+        elif tag in {"ul", "ol"}:
+            if self.liststack:
+                self.liststack = self.liststack[:-1]
+            if self.listcount:
+                self.listcount = self.listcount[:-1]
+
+            self.text += "\n\n"
+            code = self.__last_code()
+            self.codes += [code, code]
+
+            if len(self.liststack) != len(self.listcount):
+                # Never should hit this, so except on it so I can debug.
+                raise Exception("Logic error, should never get out of sync!")
+        elif tag == "li":
+            # Nothing to do on close.
             pass
         else:
             print("Unsupported end tag", tag, file=sys.stderr)
