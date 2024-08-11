@@ -81,7 +81,7 @@ class TimelinePost:
             username = emoji.demojize(striplow(reblog["account"]["acct"]))
             self.nameline = account(name, username, self.width - 2)
 
-            content = emoji.demojize(striplow(reblog["content"]))
+            content = emoji.demojize(striplow(reblog["content"], allow_safe=True))
             content, codes = html(content)
             self.spoilerText = [
                 content,
@@ -121,7 +121,7 @@ class TimelinePost:
             # No boost line here.
             self.boostline = []
 
-            content = emoji.demojize(striplow(self.data["content"]))
+            content = emoji.demojize(striplow(self.data["content"], allow_safe=True))
             content, codes = html(content)
             self.spoilerText = [
                 content,

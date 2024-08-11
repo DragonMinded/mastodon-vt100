@@ -401,6 +401,7 @@ class MastodonParser(HTMLParser):
         self.bdepth = 0
         self.udepth = 0
         self.rdepth = 0
+        self.predepth = 0
         self.liststack: List[str] = []
         self.listcount: List[int] = []
 
@@ -472,7 +473,7 @@ class MastodonParser(HTMLParser):
         return code
 
     def handle_starttag(self, tag: str, attrs: List[Tuple[str, Optional[str]]]) -> None:
-        if tag in {"p", "blockquote"}:
+        if tag in {"p", "blockquote", "pre"}:
             code = self.__last_code()
             needsNewline = bool(self.text) and self.text[-1] != "\n"
             newLine = "\n" if needsNewline else ""
@@ -480,6 +481,8 @@ class MastodonParser(HTMLParser):
             if newLine:
                 self.text += newLine
                 self.codes += [code] * len(newLine)
+            if tag == "pre":
+                self.predepth += 1
         elif tag in {"span", "code"}:
             # Spans are just wrapper elements with no formatting. Code usually denotes
             # fixed width, but we literally only can do that.
@@ -530,11 +533,18 @@ class MastodonParser(HTMLParser):
             print("Unsupported start tag", tag, file=sys.stderr)
 
     def handle_endtag(self, tag: str) -> None:
-        if tag in {"p", "blockquote"}:
-            # Simple, handle this by adding.
-            self.text += "\n\n"
+        if tag in {"p", "blockquote", "pre"}:
+            # Simple, handle this by adding up to two newlines as long as it
+            # doesn't already have those.
             code = self.__last_code()
-            self.codes += [code, code]
+            while self.text[-2:] != "\n\n":
+                self.text += "\n"
+                self.codes += [code]
+
+            if tag == "pre":
+                self.predepth -= 1
+                if self.predepth < 0:
+                    self.predepth = 0
         elif tag == "a":
             # Right now, just underline links.
             self.pending = self.__ununderline_last_code()
@@ -569,6 +579,12 @@ class MastodonParser(HTMLParser):
             print("Unsupported end tag", tag, file=sys.stderr)
 
     def handle_data(self, data: str) -> None:
+        if self.predepth == 0:
+            # Get rid of newlines in favor of spaces, like HTML does.
+            data = data.replace("\n", " ")
+            while "  " in data:
+                data = data.replace("  ", " ")
+
         self.text += data
         code = self.__last_code()
         self.codes += [code] * len(data)
