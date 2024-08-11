@@ -255,7 +255,7 @@ class TimelinePost:
                 emoji.demojize(attachment["description"] or "no description"),
                 allow_safe=True,
             )
-            url = (attachment["url"] or "").split("/")[-1]
+            url = striplow((attachment["url"] or "").split("/")[-1])
             description, codes = highlight(f"<u>{url}</u>: ")
             description += alt
             codes += [codes[-1]] * len(alt)
