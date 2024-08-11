@@ -581,9 +581,11 @@ class MastodonParser(HTMLParser):
     def handle_data(self, data: str) -> None:
         if self.predepth == 0:
             # Get rid of newlines in favor of spaces, like HTML does.
+            data = data.replace("\r\n", "\n")
+            data = data.replace("\r", "\n")
+            while "\n\n" in data:
+                data = data.replace("\n\n", "\n")
             data = data.replace("\n", " ")
-            while "  " in data:
-                data = data.replace("  ", " ")
 
         self.text += data
         code = self.__last_code()
