@@ -1,6 +1,6 @@
 from vtpy import Terminal
 
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Callable, Dict, List, Optional, Set, Tuple
 
 from .action import (
     Action,
@@ -804,27 +804,33 @@ class PostViewComponent(_PostDisplayComponent):
         self.post = self.client.fetchPostAndRelated(self.postId)
         self.renderer.status("Post fetched, drawing...")
 
-        # Now, format each post into it's own component.
-        self.posts = self._get_posts(self.post)
-        self.limit = max(0, sum([p.height for p in self.posts]) - ((self.bottom - self.top) + 1))
+        if self.post:
+            # Now, format each post into it's own component.
+            self.posts = self._get_posts(self.post)
+            self.limit = max(0, sum([p.height for p in self.posts]) - ((self.bottom - self.top) + 1))
 
-        # Endeavor to have the current post at the top of the screen.
-        self.offset = 0
-        for post in self.posts:
-            if self._get_status_from_post(post)['id'] == self.postId:
-                break
-
-            self.offset += post.height
-        else:
-            # Somehow didn't find the highlighted post?
+            # Endeavor to have the current post at the top of the screen.
             self.offset = 0
+            for post in self.posts:
+                if self._get_status_from_post(post)['id'] == self.postId:
+                    break
 
-        if self.offset > self.limit:
-            self.offset = self.limit
+                self.offset += post.height
+            else:
+                # Somehow didn't find the highlighted post?
+                self.offset = 0
 
-        # Keep track of the top of each post, and it's post number, so we can
-        # render deep-dive numbers.
-        self.positions = self._postIndexes()
+            if self.offset > self.limit:
+                self.offset = self.limit
+
+            # Keep track of the top of each post, and it's post number, so we can
+            # render deep-dive numbers.
+            self.positions = self._postIndexes()
+        else:
+            self.posts = []
+            self.limit = 0
+            self.offset = 0
+            self.positions = {}
 
     def _is_single_thread(self, post: StatusDict) -> bool:
         if len(post['replies']) == 0:
@@ -958,7 +964,32 @@ class PostViewComponent(_PostDisplayComponent):
             self.properties['last_post'] = None
             self._fetchPostFromId()
 
-        self._draw()
+        if self.post:
+            self._draw()
+        else:
+            text, codes = highlight("The requested status could not be found. It may have been deleted by the author.")
+            textlines = wordwrap(text, codes, self.renderer.columns - 2)
+
+            lines = [
+                boxtop(self.renderer.columns),
+                *[boxmiddle(line, self.renderer.columns) for line in textlines],
+                boxbottom(self.renderer.columns),
+            ]
+
+            bounds = BoundingRectangle(
+                top=self.top, bottom=self.bottom, left=1, right=self.renderer.columns + 1
+            )
+            display(self.renderer.terminal, lines, bounds)
+
+            pos = self.top + len(lines)
+
+            while pos <= self.bottom:
+                self.renderer.terminal.moveCursor(pos, 1)
+                self.renderer.terminal.sendCommand(Terminal.CLEAR_LINE)
+                pos += 1
+
+            self.renderer.terminal.moveCursor(self.bottom, self.renderer.terminal.columns)
+
         if not self.drawn:
             self.drawn = True
             self.renderer.status("Press '?' for help.")
@@ -1044,70 +1075,99 @@ class PostViewComponent(_PostDisplayComponent):
 
         elif inputVal == b"c":
             # Post a new reply action.
-            self.drawn = False
-            self.properties['last_post'] = None
-            return SwapScreenAction(spawnPostScreen, replyTo=self.post, exitMessage="Drawing...")
+            if self.post:
+                self.drawn = False
+                self.properties['last_post'] = None
+                return SwapScreenAction(spawnPostScreen, replyTo=self.post, exitMessage="Drawing...")
+
+            return NullAction()
+
+        elif inputVal == b"d":
+            if self.post:
+                # Delete current reply action.
+                if self.post['account']['id'] == self.properties["account"]["id"]:
+                    def yes() -> None:
+                        self.renderer.status("Deleting post...")
+                        self.client.deletePost(self.post)  # type: ignore
+                        self.properties['last_post'] = None
+                        self._fetchPostFromId()
+                        self.drawn = False
+
+                    def no() -> None:
+                        self.renderer.status("Drawing...")
+                        self.drawn = False
+
+                    return SwapScreenAction(
+                        spawnConfirmationScreen,
+                        text="Are you sure you want to delete this post? This action cannot be undone!",
+                        yes=yes,
+                        no=no,
+                    )
+
+            return NullAction()
 
         elif inputVal in {b"1", b"2", b"3", b"4", b"5", b"6", b"7", b"8", b"9", b"0"}:
-            postNo = {
-                b"1": 0,
-                b"2": 1,
-                b"3": 2,
-                b"4": 3,
-                b"5": 4,
-                b"6": 5,
-                b"7": 6,
-                b"8": 7,
-                b"9": 8,
-                b"0": 9,
-            }[inputVal]
+            if self.post:
+                postNo = {
+                    b"1": 0,
+                    b"2": 1,
+                    b"3": 2,
+                    b"4": 3,
+                    b"5": 4,
+                    b"6": 5,
+                    b"7": 6,
+                    b"8": 7,
+                    b"9": 8,
+                    b"0": 9,
+                }[inputVal]
 
-            minpost = self.positions[min(self.positions.keys())]
-            for off, post in self.positions.items():
-                if off > self.bottom:
-                    break
+                minpost = self.positions[min(self.positions.keys())]
+                for off, post in self.positions.items():
+                    if off > self.bottom:
+                        break
 
-                if post - minpost == postNo:
-                    # This is the right post, go to the same screen as we're on but with
-                    # the new post highlighted as the current post.
-                    status = self._get_status_from_post(self.posts[post])
+                    if post - minpost == postNo:
+                        # This is the right post, go to the same screen as we're on but with
+                        # the new post highlighted as the current post.
+                        status = self._get_status_from_post(self.posts[post])
 
-                    self.renderer.status("Fetching post and replies...")
-                    return SwapScreenAction(spawnPostAndRepliesScreen, post=status)
+                        self.renderer.status("Fetching post and replies...")
+                        return SwapScreenAction(spawnPostAndRepliesScreen, post=status)
 
             return NullAction()
 
         elif inputVal in {b"!", b"@", b"#", b"$", b"%", b"^", b"&", b"*", b"(", b")"}:
-            postNo = {
-                b"!": 0,
-                b"@": 1,
-                b"#": 2,
-                b"$": 3,
-                b"%": 4,
-                b"^": 5,
-                b"&": 6,
-                b"*": 7,
-                b"(": 8,
-                b")": 9,
-            }[inputVal]
+            if self.post:
+                postNo = {
+                    b"!": 0,
+                    b"@": 1,
+                    b"#": 2,
+                    b"$": 3,
+                    b"%": 4,
+                    b"^": 5,
+                    b"&": 6,
+                    b"*": 7,
+                    b"(": 8,
+                    b")": 9,
+                }[inputVal]
 
-            minpost = self.positions[min(self.positions.keys())]
-            for off, post in self.positions.items():
-                if off > self.bottom:
-                    break
+                minpost = self.positions[min(self.positions.keys())]
+                for off, post in self.positions.items():
+                    if off > self.bottom:
+                        break
 
-                if post - minpost == postNo:
-                    # This is the right post.
-                    if self.posts[post].toggle_spoiler():
-                        # This needs redrawing.
-                        for line in range(off, off + self.posts[post].height):
-                            if line < self.top:
-                                continue
-                            if line > self.bottom:
-                                continue
-                            self._drawOneLine(line)
+                    if post - minpost == postNo:
+                        # This is the right post.
+                        if self.posts[post].toggle_spoiler():
+                            # This needs redrawing.
+                            for line in range(off, off + self.posts[post].height):
+                                if line < self.top:
+                                    continue
+                                if line > self.bottom:
+                                    continue
+                                self._drawOneLine(line)
 
-                    break
+                        break
 
             return NullAction()
 
@@ -1171,91 +1231,25 @@ class PostViewComponent(_PostDisplayComponent):
             return NullAction()
 
         elif inputVal == b"p":
-            # Move to previous post.
-            postAndOffset = self._getPostForLine(self.top)
-            whichPost = int(postAndOffset)
-            if postAndOffset - whichPost == 0.0:
-                # We're on the top line of the current post, grab the previous.
-                whichPost -= 1
-            if whichPost < 0:
-                whichPost = 0
-
-            # Figure out how much we have to move to get there.
-            newOffset = self._getLineForPost(whichPost)
-            if newOffset is not None:
-                moveAmount = self.offset - (newOffset - self.top)
-            else:
-                moveAmount = 0
-
-            if moveAmount > 0:
-                self.offset -= moveAmount
-
-                newPositions = self._postIndexes()
-                postNumberRedraw = list(self.positions.values()) != list(
-                    newPositions.values()
-                )
-                self.positions = newPositions
-
-                if moveAmount <= (self.bottom - self.top):
-                    # We can scroll to save render time.
-                    self.terminal.sendCommand(Terminal.SAVE_CURSOR)
-                    self.terminal.moveCursor(self.top, 1)
-                    self.terminal.setScrollRegion(self.top, self.bottom)
-                    for _ in range(moveAmount):
-                        self.terminal.sendCommand(Terminal.MOVE_CURSOR_UP)
-                    self.terminal.clearScrollRegion()
-
-                    # Redraw post numbers if necessary.
-                    if postNumberRedraw:
-                        skippables = {x for x in range(self.top, self.top + moveAmount)}
-                        for line in self.positions.keys():
-                            if line < self.top:
-                                continue
-                            if line > self.bottom:
-                                continue
-                            if line in skippables:
-                                continue
-                            self._drawOneLine(line)
-
-                    for line in range(moveAmount):
-                        self._drawOneLine(self.top + line)
-                    self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
-                else:
-                    # We must redraw the whole screen.
-                    self._draw()
-
-            return NullAction()
-
-        elif inputVal == b"n":
-            # Move to next post. Unlike normal timeline view, this doesn't allow scrolling "past"
-            # the final post, since there's no infinite scroll. Instead, if your next post action
-            # would scroll past the final post, we only scroll enough to put that in focus.
-            if self.offset < self.limit:
+            if self.post:
+                # Move to previous post.
                 postAndOffset = self._getPostForLine(self.top)
-                whichPost = int(postAndOffset) + 1
+                whichPost = int(postAndOffset)
+                if postAndOffset - whichPost == 0.0:
+                    # We're on the top line of the current post, grab the previous.
+                    whichPost -= 1
+                if whichPost < 0:
+                    whichPost = 0
 
-                if whichPost == len(self.posts) and whichPost > 0:
-                    # Possibly scrolling to the next entry that hasn't been fetched.
-                    newOffset = self._getLineForPost(whichPost - 1)
-                    if newOffset is None:
-                        raise Exception(
-                            "Logic error, should always be able to get a line for an existing post."
-                        )
-                    newOffset += self.posts[whichPost - 1].height
-                else:
-                    # Figure out how much we have to move to get there.
-                    newOffset = self._getLineForPost(whichPost)
-
+                # Figure out how much we have to move to get there.
+                newOffset = self._getLineForPost(whichPost)
                 if newOffset is not None:
-                    moveAmount = (newOffset - self.top) - self.offset
+                    moveAmount = self.offset - (newOffset - self.top)
                 else:
                     moveAmount = 0
 
-                if self.offset + moveAmount >= self.limit:
-                    moveAmount = self.limit - self.offset
-
                 if moveAmount > 0:
-                    self.offset += moveAmount
+                    self.offset -= moveAmount
 
                     newPositions = self._postIndexes()
                     postNumberRedraw = list(self.positions.values()) != list(
@@ -1266,20 +1260,15 @@ class PostViewComponent(_PostDisplayComponent):
                     if moveAmount <= (self.bottom - self.top):
                         # We can scroll to save render time.
                         self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+                        self.terminal.moveCursor(self.top, 1)
                         self.terminal.setScrollRegion(self.top, self.bottom)
-                        self.terminal.moveCursor((self.bottom - self.top) + 1, 1)
                         for _ in range(moveAmount):
-                            self.terminal.sendCommand(Terminal.MOVE_CURSOR_DOWN)
+                            self.terminal.sendCommand(Terminal.MOVE_CURSOR_UP)
                         self.terminal.clearScrollRegion()
 
                         # Redraw post numbers if necessary.
                         if postNumberRedraw:
-                            skippables = {
-                                x
-                                for x in range(
-                                    self.bottom - (moveAmount - 1), self.bottom + 1
-                                )
-                            }
+                            skippables = {x for x in range(self.top, self.top + moveAmount)}
                             for line in self.positions.keys():
                                 if line < self.top:
                                     continue
@@ -1290,12 +1279,85 @@ class PostViewComponent(_PostDisplayComponent):
                                 self._drawOneLine(line)
 
                         for line in range(moveAmount):
-                            actualLine = (self.bottom - (moveAmount - 1)) + line
-                            self._drawOneLine(actualLine)
+                            self._drawOneLine(self.top + line)
                         self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
                     else:
                         # We must redraw the whole screen.
                         self._draw()
+
+            return NullAction()
+
+        elif inputVal == b"n":
+            if self.post:
+                # Move to next post. Unlike normal timeline view, this doesn't allow scrolling "past"
+                # the final post, since there's no infinite scroll. Instead, if your next post action
+                # would scroll past the final post, we only scroll enough to put that in focus.
+                if self.offset < self.limit:
+                    postAndOffset = self._getPostForLine(self.top)
+                    whichPost = int(postAndOffset) + 1
+
+                    if whichPost == len(self.posts) and whichPost > 0:
+                        # Possibly scrolling to the next entry that hasn't been fetched.
+                        newOffset = self._getLineForPost(whichPost - 1)
+                        if newOffset is None:
+                            raise Exception(
+                                "Logic error, should always be able to get a line for an existing post."
+                            )
+                        newOffset += self.posts[whichPost - 1].height
+                    else:
+                        # Figure out how much we have to move to get there.
+                        newOffset = self._getLineForPost(whichPost)
+
+                    if newOffset is not None:
+                        moveAmount = (newOffset - self.top) - self.offset
+                    else:
+                        moveAmount = 0
+
+                    if self.offset + moveAmount >= self.limit:
+                        moveAmount = self.limit - self.offset
+
+                    if moveAmount > 0:
+                        self.offset += moveAmount
+
+                        newPositions = self._postIndexes()
+                        postNumberRedraw = list(self.positions.values()) != list(
+                            newPositions.values()
+                        )
+                        self.positions = newPositions
+
+                        if moveAmount <= (self.bottom - self.top):
+                            # We can scroll to save render time.
+                            self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+                            self.terminal.setScrollRegion(self.top, self.bottom)
+                            self.terminal.moveCursor((self.bottom - self.top) + 1, 1)
+                            for _ in range(moveAmount):
+                                self.terminal.sendCommand(Terminal.MOVE_CURSOR_DOWN)
+                            self.terminal.clearScrollRegion()
+
+                            # Redraw post numbers if necessary.
+                            if postNumberRedraw:
+                                skippables = {
+                                    x
+                                    for x in range(
+                                        self.bottom - (moveAmount - 1), self.bottom + 1
+                                    )
+                                }
+                                for line in self.positions.keys():
+                                    if line < self.top:
+                                        continue
+                                    if line > self.bottom:
+                                        continue
+                                    if line in skippables:
+                                        continue
+                                    self._drawOneLine(line)
+
+                            for line in range(moveAmount):
+                                actualLine = (self.bottom - (moveAmount - 1)) + line
+                                self._drawOneLine(actualLine)
+                            self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
+                        else:
+                            # We must redraw the whole screen.
+                            self._draw()
 
             return NullAction()
 
@@ -1777,6 +1839,124 @@ class ErrorComponent(Component):
         return None
 
 
+class ConfirmationComponent(Component):
+    def __init__(
+        self,
+        renderer: Renderer,
+        top: int,
+        bottom: int,
+        *,
+        text: str = "",
+        yes: Callable[[], None] = lambda : None,
+        no: Callable[[], None] = lambda : None,
+    ) -> None:
+        super().__init__(renderer, top, bottom)
+
+        # Set up which component we're on, defaulting to the no option.
+        self.left = (self.renderer.terminal.columns // 2) - 20
+        self.right = self.renderer.terminal.columns - self.left
+        component = 1
+
+        # Set up for what input we're handling.
+        self.confirm = Button(
+            renderer,
+            "yes",
+            (self.top - 1) + 12,
+            self.left + 2,
+            focused=component == 0,
+        )
+        self.cancel = Button(
+            renderer,
+            "no",
+            (self.top - 1) + 12,
+            self.left + 34,
+            focused=component == 1,
+        )
+
+        self.focusWrapper = FocusWrapper(
+            [self.confirm, self.cancel], component
+        )
+        self.text = text
+        self.yes = yes
+        self.no = no
+
+    def __summonBox(self) -> List[Tuple[str, List[ControlCodes]]]:
+        # First, create the "yes" and "no" buttons.
+        yes = self.confirm.lines
+        no = self.cancel.lines
+
+        # Now, create the "middle bit" between the buttons.
+        middle = highlight(pad("", 36 - 5 - 4))
+
+        # Create the text lines themselves.
+        text, codes = highlight(self.text + "\n\n\n\n\n\npadding")
+        textlines = wordwrap(text, codes, 36)[:6]
+
+        # Now, create the prompt box itself.
+        lines = [
+            boxtop(38),
+            *[boxmiddle(textline, 38) for textline in textlines],
+            *[
+                boxmiddle(join([yes[x], middle, no[x]]), 38)
+                for x in range(len(yes))
+            ],
+            boxbottom(38),
+        ]
+
+        return lines
+
+    def draw(self) -> None:
+        # Don't clear the screen, so this can pop over the existing drawn content.
+        lines = self.__summonBox()
+        bounds = BoundingRectangle(
+            top=(self.top - 1) + 5,
+            bottom=(self.top - 1) + 16,
+            left=self.left + 1,
+            right=self.right + 1,
+        )
+        display(self.terminal, lines, bounds)
+
+        # Finally, display the status.
+        self.renderer.status("Use tab to move between options.")
+
+        # Now, put the cursor in the right spot.
+        self.focusWrapper.focus()
+
+    def processInput(self, inputVal: bytes) -> Optional[Action]:
+        if inputVal in {Terminal.LEFT, Terminal.UP}:
+            # Go to previous component.
+            self.focusWrapper.previous()
+
+            return NullAction()
+        elif inputVal in {Terminal.RIGHT, Terminal.DOWN}:
+            # Go to next component.
+            self.focusWrapper.next()
+
+            return NullAction()
+        elif inputVal == b"\r":
+            # Ignore this.
+            return NullAction()
+        elif inputVal == b"\t":
+            # Client pressed tab.
+            self.focusWrapper.next(wrap=True)
+
+            return NullAction()
+        elif inputVal == b"\n":
+            # Client pressed enter.
+            if self.focusWrapper.component in {0, 1}:
+                # Run the callback, and then exit.
+                if self.focusWrapper.component == 0:
+                    self.yes()
+                elif self.focusWrapper.component == 1:
+                    self.no()
+
+                return BackAction()
+
+            return NullAction()
+        else:
+            return self.focusWrapper.processInput(inputVal)
+
+
 class HTMLComponent(Component):
     def __init__(
         self,
@@ -1845,6 +2025,12 @@ def spawnLoginScreen(
             )
         ]
     )
+
+
+def spawnConfirmationScreen(
+    renderer: Renderer, *, text: str = "", yes: Callable[[], None] = lambda : None, no: Callable[[], None] = lambda : None,
+) -> None:
+    renderer.push([ConfirmationComponent(renderer, top=1, bottom=renderer.rows, text=text, yes=yes, no=no)])
 
 
 def spawnErrorScreen(

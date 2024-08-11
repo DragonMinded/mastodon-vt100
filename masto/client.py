@@ -2,7 +2,7 @@ import os
 from datetime import datetime
 from enum import Enum, auto
 from mastodon import Mastodon  # type: ignore
-from mastodon.errors import MastodonNetworkError, MastodonIllegalArgumentError  # type: ignore
+from mastodon.errors import MastodonNetworkError, MastodonIllegalArgumentError, MastodonNotFoundError  # type: ignore
 from urllib.parse import urlparse
 from typing import Dict, List, Optional, TypedDict, cast
 
@@ -173,17 +173,27 @@ class Client:
 
         return cast(List[StatusDict], statuses)
 
-    def fetchPost(self, postId: int) -> StatusDict:
+    def fetchPost(self, postId: int) -> Optional[StatusDict]:
         self.__assert_valid()
-        post = cast(StatusDict, self.__client.status(postId))
-        post['ancestors'] = []
-        post['replies'] = []
-        return post
 
-    def fetchPostAndRelated(self, postId: int) -> StatusDict:
+        try:
+            post = cast(StatusDict, self.__client.status(postId))
+            post['ancestors'] = []
+            post['replies'] = []
+            return post
+        except MastodonNotFoundError:
+            return None
+
+    def fetchPostAndRelated(self, postId: int) -> Optional[StatusDict]:
         self.__assert_valid()
-        post = self.fetchPost(postId)
-        related = cast(RelatedDict, self.__client.status_context(postId))
+
+        try:
+            post = self.fetchPost(postId)
+            if post is None:
+                return None
+            related = cast(RelatedDict, self.__client.status_context(postId))
+        except MastodonNotFoundError:
+            return None
 
         # Set some sane defaults.
         post['ancestors'] = []
@@ -292,4 +302,11 @@ class Client:
         return cast(
             StatusDict,
             self.__client.status_post(status, visibility=visStr, spoiler_text=cw, in_reply_to_id=inReplyTo),
+        )
+
+    def deletePost(self, post: StatusDict) -> StatusDict:
+        self.__assert_valid()
+        return cast(
+            StatusDict,
+            self.__client.status_delete(post)
         )

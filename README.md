@@ -10,12 +10,12 @@ Right now this is a fairly rudimentary client. The following features are presen
 - Home, local and public timelines, including rendering alt-text and CW text display toggling.
 - Infinite scroll, where additional posts are fetched when you hit the bottom of a timeline.
 - Composer box, supporting the ability to post with an optional CW and choosing the visibility.
-- Individual post/thread view, supporting the ability to edit/delete your own posts, and ability to interact with other posts.
+- Individual post/thread view, supporting the ability to delete your own posts, and ability to interact with other posts.
 - Preference respecting for CW auto-expansion and composer default post visibility.
 
 What doesn't work that I would like to get to at some point:
 
-- Ability to edit and delete previously-posted statuses.
+- Ability to edit previously-posted statuses.
 - Ability to like or boost a post from the focus view.
 - Ability to bookmark a post from the focus view, ability to view bookmarked posts.
 - User profile view with profile, pinned posts and user timeline display.
