@@ -1,6 +1,6 @@
 import sys
 from html.parser import HTMLParser
-from typing import List, Optional, Sequence, Tuple, TypeVar
+from typing import Any, List, Optional, Tuple, TypeVar
 
 from vtpy import Terminal
 
@@ -47,17 +47,17 @@ class ControlCodes:
             return normalcodes
 
 
-TObj = TypeVar("TObj", bound=object)
+ConcatableSequence = TypeVar('ConcatableSequence', List[Any], str)
 
 
 def wordwrap(
     text: str,
-    meta: Sequence[TObj],
+    meta: ConcatableSequence,
     width: int,
     *,
     strip_trailing_spaces: bool = True,
     strip_trailing_newlines: bool = True,
-) -> List[Tuple[str, Sequence[TObj]]]:
+) -> List[Tuple[str, ConcatableSequence]]:
     """
     Given a text string and a maximum allowed width, word-wraps that text by
     returning a list of lines, none of which are longer than the specified
@@ -75,22 +75,54 @@ def wordwrap(
     if len(text) != len(meta):
         raise Exception("Metadata length must match text length!")
 
-    outLines: List[Tuple[str, Sequence[TObj]]] = []
+    outLines: List[Tuple[str, ConcatableSequence]] = []
 
     # We don't handle non-unix line endings, so convert them.
-    text = text.replace("\r\n", "\n")
+    text = text.replace("\r\n", "{\x01\x02\x03}")
     text = text.replace("\r", "\n")
+    text = text.replace("{\x01\x02\x03}", "\r\n")
+
+    # First, go through and replace all tabs with the correct number of spaces.
+    lineLength = 0
+    newText = ""
+    newMeta = meta[:0]
+
+    for i, c in enumerate(text):
+        if c == "\t":
+            numSpaces = 4 - (lineLength % 4)
+            lineLength += numSpaces
+            newText += " " * numSpaces
+            for _ in range(numSpaces):
+                newMeta += meta[i:i + 1]
+        elif c == "\r":
+            # This is a vestige at this point, because all \r that aren't attached
+            # to \n are gone.
+            pass
+        elif c == "\n":
+            newText += c
+            newMeta += meta[i:i + 1]
+            lineLength = 0
+        else:
+            newText += c
+            newMeta += meta[i:i + 1]
+            lineLength += 1
+    text = newText
+    meta = newMeta
 
     # Hack to support trailing newlines properly.
     if text and text[-1] == "\n":
         text += "\x08"
+        meta += meta[-1:]
 
-    # First, go through and find any potential wrap points.
+    if len(text) != len(meta):
+        raise Exception("Logic error! Metadata length must match text length!")
+
+    # Now, go through and find any potential wrap points.
     wrapPoints: List[int] = []
     lastPunctuation = False
 
     for i, ch in enumerate(text):
-        if ch in {" ", "\t", "\n"}:
+        if ch in {" ", "\n"}:
             lastPunctuation = False
             wrapPoints.append(i)
         elif ch in {"-", "+", ";", "~", "(", ")", "[", "]", "{", "}", "<", ">"}:
@@ -135,7 +167,7 @@ def wordwrap(
         if (len(text) > width) and relevantPoints:
             pos = relevantPoints[-1]
 
-            if text[pos] in {" ", "\t"}:
+            if text[pos] == " ":
                 if strip_trailing_spaces:
                     # We don't include the space at the end of the line, or in the
                     # beginning of the next, so drop it.
@@ -144,7 +176,7 @@ def wordwrap(
                     # Find the first non-space to wrap
                     spot = -1
                     for i in range(pos + 1, len(text)):
-                        if text[i] not in {" ", "\t"}:
+                        if text[i] != " ":
                             spot = i
                             break
 
@@ -159,11 +191,11 @@ def wordwrap(
                     else:
                         # We hit the end of the text.
                         text = ""
-                        meta = []
+                        meta = meta[:0]
                         wrapPoints = []
                 else:
                     # In one case, we strip trailing space if we're replacing it with a newline.
-                    if pos == width and text[pos - 1] not in {" ", "\t"}:
+                    if pos == width and text[pos - 1] != " ":
                         outLines.append((text[:pos], meta[:pos]))
 
                         spot = pos + 1
@@ -184,7 +216,7 @@ def wordwrap(
                         # Find the first non-space to wrap
                         spot = len(text)
                         for i in range(pos + 1, len(text)):
-                            if text[i] not in {" ", "\t"}:
+                            if text[i] != " ":
                                 spot = i
                                 break
 
@@ -224,7 +256,7 @@ def wordwrap(
             wrapPoints = [x - width for x in wrapPoints if (x - width) >= 0]
 
     # Finally, get rid of trailing whitespace.
-    def stripSpace(line: Tuple[str, Sequence[TObj]]) -> Tuple[str, Sequence[TObj]]:
+    def stripSpace(line: Tuple[str, ConcatableSequence]) -> Tuple[str, ConcatableSequence]:
         text, meta = line
 
         # Unhack the trailing newline hack.
@@ -437,7 +469,15 @@ class MastodonParser(HTMLParser):
         return code
 
     def handle_starttag(self, tag: str, attrs: List[Tuple[str, Optional[str]]]) -> None:
-        if tag in {"p", "span"}:
+        if tag in {"p", "blockquote"}:
+            code = self.__last_code()
+            needsNewline = bool(self.text) and self.text[-1] != "\n"
+            newLine = "\n" if needsNewline else ""
+
+            if newLine:
+                self.text += newLine
+                self.codes += [code] * len(newLine)
+        elif tag == "span":
             pass
         elif tag == "br":
             # Simple, handle this by adding.
@@ -485,7 +525,7 @@ class MastodonParser(HTMLParser):
             print("Unsupported start tag", tag, file=sys.stderr)
 
     def handle_endtag(self, tag: str) -> None:
-        if tag == "p":
+        if tag in {"p", "blockquote"}:
             # Simple, handle this by adding.
             self.text += "\n\n"
             code = self.__last_code()
@@ -676,10 +716,10 @@ if __name__ == "__main__":
     # I know there's a billion better ways to do this but IDGAF.
     def verify(
         text: str,
-        meta: Sequence[object],
+        meta: ConcatableSequence,
         width: int,
         expectedText: List[str],
-        expectedMeta: List[Sequence[object]],
+        expectedMeta: List[ConcatableSequence],
         *,
         strip_trailing_newlines: bool = True,
         strip_trailing_spaces: bool = True,

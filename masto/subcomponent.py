@@ -256,7 +256,9 @@ class TimelinePost:
                 allow_safe=True,
             )
             url = (attachment["url"] or "").split("/")[-1]
-            description, codes = highlight(f"<u>{url}</u>: {alt}")
+            description, codes = highlight(f"<u>{url}</u>: ")
+            description += alt
+            codes += [codes[-1]] * len(alt)
 
             attachmentbody = wordwrap(description, codes, self.width - 4)
             attachmentLines += [
