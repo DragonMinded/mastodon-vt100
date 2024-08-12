@@ -1370,6 +1370,7 @@ class NewPostComponent(Component):
 
         self.exitMessage = exitMessage
         self.inReplyTo = inReplyTo
+        self.verb = "reply" if inReplyTo else "post"
 
         # Figure out their default posting preference.
         server_pref = self.properties["prefs"].get('posting:default:visibility', 'public')
@@ -1397,6 +1398,7 @@ class NewPostComponent(Component):
             'public': "public",
             'unlisted': "quiet public",
             'private': "followers",
+            'direct': "specific accounts",
         }.get(postVisibility)
 
         self.component = 0
@@ -1436,12 +1438,12 @@ class NewPostComponent(Component):
             renderer,
             ["public", "quiet public", "followers", "specific accounts"],
             self.top + 14,
-            20 if inReplyTo else 19,
+            15 + len(self.verb),
             25,
             selected=default_visibility,
         )
-        self.post = Button(renderer, "Reply" if inReplyTo else "Post", self.top + 17, 2)
-        self.discard = Button(renderer, "Discard", self.top + 17, 10 if inReplyTo else 9)
+        self.post = Button(renderer, self.verb.capitalize(), self.top + 17, 2)
+        self.discard = Button(renderer, "Discard", self.top + 17, 5 + len(self.verb))
         self.focusWrapper = FocusWrapper(
             [self.postBody, self.cw, self.visibility, self.post, self.discard], 0
         )
@@ -1453,11 +1455,11 @@ class NewPostComponent(Component):
         lines.append(
             join(
                 [
-                    highlight("Replying as " if self.inReplyTo else "Posting as "),
+                    highlight(f"{self.verb.capitalize()}ing as "),
                     account(
                         self.properties["account"]["display_name"],
                         self.properties["account"]["username"],
-                        self.renderer.columns - (14 if self.inReplyTo else 13),
+                        self.renderer.columns - (9 + len(self.verb)),
                     ),
                 ]
             )
@@ -1470,9 +1472,9 @@ class NewPostComponent(Component):
 
         # Now, add the post visibility selection.
         visibilityLines = self.visibility.lines
-        lines.append(join([highlight(" " * (18 if self.inReplyTo else 17)), visibilityLines[0]]))
-        lines.append(join([highlight("Reply Visibility: " if self.inReplyTo else "Post Visibility: "), visibilityLines[1]]))
-        lines.append(join([highlight(" " * (18 if self.inReplyTo else 17)), visibilityLines[2]]))
+        lines.append(join([highlight(" " * (13 + len(self.verb))), visibilityLines[0]]))
+        lines.append(join([highlight(f"{self.verb.capitalize()} Visibility: "), visibilityLines[1]]))
+        lines.append(join([highlight(" " * (13 + len(self.verb))), visibilityLines[2]]))
 
         # Now, add the post and discard buttons.
         postLines = self.post.lines
@@ -1583,7 +1585,7 @@ class NewPostComponent(Component):
 
                     return SwapScreenAction(
                         spawnConfirmationScreen,
-                        text="Are you sure you want to discard this post? This action cannot be undone!",
+                        text=f"Are you sure you want to discard this {self.verb}? This action cannot be undone!",
                         yes=yes,
                     )
                 else:
