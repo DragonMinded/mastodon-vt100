@@ -304,6 +304,14 @@ class Client:
             self.__client.status_post(status, visibility=visStr, spoiler_text=cw, in_reply_to_id=inReplyTo),
         )
 
+    def updatePost(self, post: StatusDict, status: str, *, cw: Optional[str] = None) -> StatusDict:
+        self.__assert_valid()
+
+        return cast(
+            StatusDict,
+            self.__client.status_update(post, status, spoiler_text=cw),
+        )
+
     def deletePost(self, post: StatusDict) -> StatusDict:
         self.__assert_valid()
         return cast(

@@ -1082,6 +1082,15 @@ class PostViewComponent(_PostDisplayComponent):
 
             return NullAction()
 
+        elif inputVal == b"e":
+            # Edit current reply action.
+            if self.post and not self.post["reblog"]:
+                self.drawn = False
+                self.properties['last_post'] = None
+                return SwapScreenAction(spawnPostScreen, edit=self.post, exitMessage="Drawing...")
+
+            return NullAction()
+
         elif inputVal == b"d":
             if self.post:
                 # Delete current reply action.
@@ -1364,17 +1373,29 @@ class PostViewComponent(_PostDisplayComponent):
         return None
 
 
-class NewPostComponent(Component):
-    def __init__(self, renderer: Renderer, top: int, bottom: int, inReplyTo: Optional[StatusDict] = None, exitMessage: str = "") -> None:
+class ComposePostComponent(Component):
+    def __init__(
+        self,
+        renderer: Renderer,
+        top: int,
+        bottom: int,
+        edit: Optional[StatusDict] = None,
+        inReplyTo: Optional[StatusDict] = None,
+        exitMessage: str = "",
+    ) -> None:
         super().__init__(renderer, top, bottom)
+        if inReplyTo and edit:
+            raise Exception("Logic error, can't edit and reply to a post at once!")
 
         self.exitMessage = exitMessage
         self.inReplyTo = inReplyTo
-        self.verb = "reply" if inReplyTo else "post"
+        self.edit = edit
+        self.verb = "reply" if inReplyTo else ("edit" if edit else "post")
 
         # Figure out their default posting preference.
         server_pref = self.properties["prefs"].get('posting:default:visibility', 'public')
         if inReplyTo:
+            # Reply visibility is copied from the post we reply to.
             postVisibility = inReplyTo['visibility'] or 'public'
             if postVisibility == 'public':
                 # In this case, we let the server pref win out.
@@ -1390,16 +1411,22 @@ class NewPostComponent(Component):
             elif postVisibility == 'direct':
                 # In this case, we're as private as we can get, so server pref is irrelevant.
                 pass
+        elif edit:
+            # Edit visibility is simply preserved.
+            postVisibility = edit['visibility'] or 'invalid'
         else:
             # No reply, so post visibility IS the server pref.
             postVisibility = server_pref
 
-        default_visibility: Optional[str] = {
+        if postVisibility not in {'public', 'unlisted', 'private', 'direct'}:
+            raise Exception(f"Logic error, unknown visibility {postVisibility}")
+
+        default_visibility: str = {
             'public': "public",
             'unlisted': "quiet public",
             'private': "followers",
             'direct': "specific accounts",
-        }.get(postVisibility)
+        }[postVisibility]
 
         self.component = 0
 
@@ -1418,8 +1445,12 @@ class NewPostComponent(Component):
             postText = " ".join(f"@{a}" for a in accounts)
             if postText:
                 postText += " "
+        # For edits, start with the input box as the original status.
+        elif edit:
+            postText = edit['content']
         else:
             postText = ""
+
         self.postBody = MultiLineInputBox(
             renderer, postText, self.top + 2, 2, self.renderer.columns - 2, 10
         )
@@ -1428,15 +1459,19 @@ class NewPostComponent(Component):
         # Match the CW from a reply if it is present.
         if inReplyTo:
             cwText = inReplyTo['spoiler_text'] or ""
+        # Match the CW from the edit if it is present.
+        elif edit:
+            cwText = edit['spoiler_text'] or ""
         else:
             cwText = ""
         self.cw = OneLineInputBox(
             renderer, cwText, self.top + 13, 2, self.renderer.columns - 2
         )
 
+        # Cannot edit visibility when in edit post mode, so we just give one option to the user.
         self.visibility = HorizontalSelect(
             renderer,
-            ["public", "quiet public", "followers", "specific accounts"],
+            [default_visibility] if edit else ["public", "quiet public", "followers", "specific accounts"],
             self.top + 14,
             15 + len(self.verb),
             25,
@@ -1570,8 +1605,12 @@ class NewPostComponent(Component):
                 else:
                     raise Exception("Logic error, couldn't map visibility!")
 
-                self.properties['last_post'] = self.client.createPost(status, visibility, inReplyTo=self.inReplyTo, cw=cw)
-                self.renderer.status("New status posted! Drawing...")
+                if self.edit:
+                    self.properties['last_post'] = self.client.updatePost(self.edit, status, cw=cw)
+                    self.renderer.status("Existing status updated! Drawing...")
+                else:
+                    self.properties['last_post'] = self.client.createPost(status, visibility, inReplyTo=self.inReplyTo, cw=cw)
+                    self.renderer.status("New status posted! Drawing...")
 
                 # Go back now, once post was successfully posted.
                 return BackAction()
@@ -2082,8 +2121,8 @@ def spawnPostAndRepliesScreen(
     renderer.push([PostViewComponent(renderer, top=1, bottom=renderer.rows, postId=post['id'] if post else 0)])
 
 
-def spawnPostScreen(renderer: Renderer, replyTo: Optional[StatusDict] = None, exitMessage: str = "") -> None:
-    renderer.push([NewPostComponent(renderer, top=1, bottom=renderer.rows, inReplyTo=replyTo, exitMessage=exitMessage)])
+def spawnPostScreen(renderer: Renderer, edit: Optional[StatusDict] = None, replyTo: Optional[StatusDict] = None, exitMessage: str = "") -> None:
+    renderer.push([ComposePostComponent(renderer, top=1, bottom=renderer.rows, edit=edit, inReplyTo=replyTo, exitMessage=exitMessage)])
 
 
 def spawnHTMLScreen(
