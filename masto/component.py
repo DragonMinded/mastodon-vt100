@@ -967,7 +967,7 @@ class PostViewComponent(_PostDisplayComponent):
         if self.post:
             self._draw()
         else:
-            text, codes = highlight("The requested status could not be found. It may have been deleted by the author.")
+            text, codes = highlight("The requested post could not be found. It may have been deleted by the author.")
             textlines = wordwrap(text, codes, self.renderer.columns - 2)
 
             lines = [
@@ -1421,6 +1421,7 @@ class NewPostComponent(Component):
         self.postBody = MultiLineInputBox(
             renderer, postText, self.top + 2, 2, self.renderer.columns - 2, 10
         )
+        self.originalText = postText
 
         # Match the CW from a reply if it is present.
         if inReplyTo:
@@ -1573,10 +1574,22 @@ class NewPostComponent(Component):
                 # Go back now, once post was successfully posted.
                 return BackAction()
             elif self.focusWrapper.component == 4:
-                # Client wants to discard their post.
-                if self.exitMessage:
-                    self.renderer.status(self.exitMessage)
-                return BackAction()
+                # Client wants to discard their post. Confirm with them if they made edits.
+                if self.postBody.text != self.originalText:
+                    def yes() -> Action:
+                        if self.exitMessage:
+                            self.renderer.status(self.exitMessage)
+                        return BackAction(depth=2)
+
+                    return SwapScreenAction(
+                        spawnConfirmationScreen,
+                        text="Are you sure you want to discard this post? This action cannot be undone!",
+                        yes=yes,
+                    )
+                else:
+                    if self.exitMessage:
+                        self.renderer.status(self.exitMessage)
+                    return BackAction()
 
             return NullAction()
         else:
@@ -1847,8 +1860,8 @@ class ConfirmationComponent(Component):
         bottom: int,
         *,
         text: str = "",
-        yes: Callable[[], None] = lambda : None,
-        no: Callable[[], None] = lambda : None,
+        yes: Callable[[], Optional[Action]] = lambda : None,
+        no: Callable[[], Optional[Action]] = lambda : None,
     ) -> None:
         super().__init__(renderer, top, bottom)
 
@@ -1946,11 +1959,16 @@ class ConfirmationComponent(Component):
             if self.focusWrapper.component in {0, 1}:
                 # Run the callback, and then exit.
                 if self.focusWrapper.component == 0:
-                    self.yes()
+                    resp = self.yes()
                 elif self.focusWrapper.component == 1:
-                    self.no()
+                    resp = self.no()
+                else:
+                    resp = NullAction()
 
-                return BackAction()
+                if resp is not None:
+                    return resp
+                else:
+                    return BackAction()
 
             return NullAction()
         else:

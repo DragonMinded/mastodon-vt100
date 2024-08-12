@@ -18,7 +18,8 @@ class ExitAction(Action):
 
 
 class BackAction(Action):
-    pass
+    def __init__(self, depth: int = 1) -> None:
+        self.depth = depth
 
 
 class SwapScreenAction(Action):

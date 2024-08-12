@@ -107,7 +107,7 @@ def main(
                     elif isinstance(action, SwapScreenAction):
                         action.swap(renderer, **action.params)
                     elif isinstance(action, BackAction):
-                        renderer.pop()
+                        renderer.pop(action.depth)
 
         except TerminalException:
             # Terminal went away mid-transaction.

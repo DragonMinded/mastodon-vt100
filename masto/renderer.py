@@ -47,11 +47,13 @@ class Renderer:
         for component in self.__components:
             component.draw()
 
-    def pop(self) -> None:
-        if self.__stack:
-            self.__components = self.__stack[-1]
-            self.__stack = self.__stack[:-1]
+    def pop(self, depth: int = 1) -> None:
+        for _ in range(depth):
+            if self.__stack:
+                self.__components = self.__stack[-1]
+                self.__stack = self.__stack[:-1]
 
+        if self.__stack:
             for component in self.__components:
                 component.draw()
 
