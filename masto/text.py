@@ -393,8 +393,9 @@ def highlight(text: str) -> Tuple[str, List[ControlCodes]]:
 
 
 class MastodonParser(HTMLParser):
-    def __init__(self) -> None:
+    def __init__(self, textOnly: bool = False) -> None:
         super().__init__(convert_charrefs=True)
+        self.textOnly = textOnly
         self.text = ""
         self.codes: List[ControlCodes] = []
         self.pending: Optional[ControlCodes] = None
@@ -525,7 +526,7 @@ class MastodonParser(HTMLParser):
                     self.text += text
                 elif self.liststack[-1] == "ul":
                     # Uncounted list. Add an indented middot.
-                    text = newLine + (" " * len(self.liststack)) + "\xb7 "
+                    text = newLine + (" " * len(self.liststack)) + ("- " if self.textOnly else "\xb7 ")
                     self.codes += [code] * len(text)
                     self.text += text
                 self.listcount[-1] += 1
@@ -611,6 +612,15 @@ def html(data: str) -> Tuple[str, List[ControlCodes]]:
     parser.close()
 
     return parser.parsed()
+
+
+def plain(data: str) -> str:
+    parser = MastodonParser(textOnly=True)
+    parser.feed(data)
+    parser.close()
+
+    text, _ = parser.parsed()
+    return text
 
 
 def display(

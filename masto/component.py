@@ -1,3 +1,4 @@
+import emoji
 from vtpy import Terminal
 
 from typing import Callable, Dict, List, Optional, Set, Tuple
@@ -29,7 +30,7 @@ from .subcomponent import (
     OneLineInputBox,
     MultiLineInputBox,
 )
-from .text import ControlCodes, display, html, highlight, wordwrap, pad
+from .text import ControlCodes, display, html, highlight, pad, plain, wordwrap
 
 
 class Component:
@@ -1447,7 +1448,9 @@ class ComposePostComponent(Component):
                 postText += " "
         # For edits, start with the input box as the original status.
         elif edit:
-            postText = edit['content']
+            # The API for masto specifies the content will ALWAYS be in HTML, so we need to
+            # strip it. Otherwise we get HTML markings in the edit iteslf.
+            postText = emoji.demojize(plain(edit['content']))
         else:
             postText = ""
 
@@ -1565,6 +1568,18 @@ class ComposePostComponent(Component):
 
                 return NullAction()
 
+        elif inputVal == Terminal.LEFT and self.focusWrapper.component == 4:
+            # Go from discard to post button.
+            self.focusWrapper.previous()
+
+            return NullAction()
+
+        elif inputVal == Terminal.RIGHT and self.focusWrapper.component == 3:
+            # Go from post to discard button.
+            self.focusWrapper.next()
+
+            return NullAction()
+
         elif inputVal in {Terminal.LEFT, Terminal.RIGHT}:
             # Pass on to components.
             return self.focusWrapper.processInput(inputVal)
@@ -1587,7 +1602,7 @@ class ComposePostComponent(Component):
                 self.focusWrapper.next()
             elif self.focusWrapper.component == 3:
                 # Actually attempt to post.
-                status = self.postBody.text
+                status = emoji.emojize(self.postBody.text)
                 if self.cw.text:
                     cw = self.cw.text
                 else:
@@ -1761,6 +1776,14 @@ class LoginComponent(Component):
             # Go to next component.
             self.focusWrapper.next()
 
+            return NullAction()
+        elif inputVal == Terminal.LEFT and self.focusWrapper.component == 3:
+            # Go from quit to login button.
+            self.focusWrapper.previous()
+            return NullAction()
+        elif inputVal == Terminal.RIGHT and self.focusWrapper.component == 2:
+            # Go from login to quit button.
+            self.focusWrapper.next()
             return NullAction()
         elif inputVal == b"\r":
             # Ignore this.
