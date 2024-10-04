@@ -1169,6 +1169,41 @@ class PostViewComponent(_PostDisplayComponent):
 
             return NullAction()
 
+        elif inputVal == b"l":
+            # Like or unlike current reply action.
+            if self.post:
+                target = self.post['reblog']
+                if not target:
+                    target = self.post
+
+                self.properties['last_post'] = None
+
+                if target['favourited']:
+                    # Need to unlike this.
+                    self.renderer.status("Unliking post...")
+                    update = self.client.unlikePost(target)
+                    action = "unliked"
+                else:
+                    # Need to like this
+                    self.renderer.status("Liking post...")
+                    update = self.client.likePost(target)
+                    action = "liked"
+
+                reblog = update['reblog']
+                if reblog:
+                    self.post['favourited'] = reblog['favourited']
+                    self.post['favourites_count'] = reblog['favourites_count']
+                else:
+                    self.post['favourited'] = update['favourited']
+                    self.post['favourites_count'] = update['favourites_count']
+
+                self._formatPost()
+                self.drawn = False
+                self.renderer.status(f"Post {action}, drawing...")
+                self.draw()
+
+            return NullAction()
+
         elif inputVal in {b"1", b"2", b"3", b"4", b"5", b"6", b"7", b"8", b"9", b"0"}:
             if self.post:
                 postNo = {

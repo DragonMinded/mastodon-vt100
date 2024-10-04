@@ -332,3 +332,17 @@ class Client:
             StatusDict,
             self.__client.status_unreblog(post)
         )
+
+    def likePost(self, post: StatusDict) -> StatusDict:
+        self.__assert_valid()
+        return cast(
+            StatusDict,
+            self.__client.status_favourite(post)
+        )
+
+    def unlikePost(self, post: StatusDict) -> StatusDict:
+        self.__assert_valid()
+        return cast(
+            StatusDict,
+            self.__client.status_unfavourite(post)
+        )
