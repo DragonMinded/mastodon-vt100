@@ -8,6 +8,7 @@ Right now this is a fairly rudimentary client. The following features are presen
 
 - Basic login/logout flow for your Mastodon-compatible instance.
 - Home, local and public timelines, including rendering alt-text and CW text display toggling.
+- Saved bookmark list, with all the features of any other timeline.
 - Infinite scroll, where additional posts are fetched when you hit the bottom of a timeline.
 - Composer box, supporting the ability to post or reply with an optional CW and choosing the visibility.
 - Individual post/thread view, supporting the ability to edit/delete your own posts, and ability to interact with other posts such as replying, liking or boosting.
@@ -15,7 +16,7 @@ Right now this is a fairly rudimentary client. The following features are presen
 
 What doesn't work that I would like to get to at some point:
 
-- Ability to bookmark a post from the focus view, ability to view bookmarked posts.
+- Ability to bookmark a post from the focus view.
 - User profile view with profile, pinned posts and user timeline display.
 - Conversation/private messaging support.
 - Additional formatting support for the post renderer.

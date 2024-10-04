@@ -306,10 +306,23 @@ class PlaceholderPost:
         text, codes = highlight(self.caption)
         textlines = wordwrap(text, codes, self.width - 2)
 
+        # Center postbody pieces.
+        centeredlines = []
+        width = self.width - 2
+        for text, codes in textlines:
+            if len(text) < width:
+                leftAdd = (width - len(text)) // 2
+                text = (" " * leftAdd) + text
+                codes = [
+                    *([ControlCodes(bold=False, underline=False, reverse=False)] * leftAdd),
+                    *codes,
+                ]
+            centeredlines.append((text, codes))
+
         # Now, surround the post in a box.
         formattedlines = [
             boxtop(self.width),
-            *[boxmiddle(line, self.width) for line in textlines],
+            *[boxmiddle(line, self.width) for line in centeredlines],
             boxbottom(self.width),
         ]
 

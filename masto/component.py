@@ -1,7 +1,7 @@
 import emoji
 from vtpy import Terminal
 
-from typing import Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 from .action import (
     Action,
@@ -210,10 +210,10 @@ class _PostDisplayComponent(Component):
         # is fun to code for!
         self.renderer.terminal.moveCursor(self.top, 1)
 
-        posts: List[Union[TimelinePost, PlaceholderPost]] = self.posts[:]
-        if self.placeholderPost:
-            posts.append(self.placeholderPost)
-
+        posts: Sequence[Union[TimelinePost, PlaceholderPost]] = [
+            *self.posts,
+            *([self.placeholderPost] if self.placeholderPost else [])
+        ]
         for post in posts:
             if pos >= viewHeight:
                 # Too low below the viewport.
@@ -259,10 +259,10 @@ class _PostDisplayComponent(Component):
         pos = -self.offset
         viewHeight = (self.bottom - self.top) + 1
 
-        posts: List[Union[TimelinePost, PlaceholderPost]] = self.posts[:]
-        if self.placeholderPost:
-            posts.append(self.placeholderPost)
-
+        posts: Sequence[Union[TimelinePost, PlaceholderPost]] = [
+            *self.posts,
+            *([self.placeholderPost] if self.placeholderPost else [])
+        ]
         for post in posts:
             if pos >= viewHeight:
                 # Too low below the viewport.
