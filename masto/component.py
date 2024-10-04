@@ -801,10 +801,14 @@ class PostViewComponent(_PostDisplayComponent):
             ]
         )
 
-    def _fetchPostFromId(self) -> None:
+    def _fetchPostFromId(self, display_status: bool = True) -> None:
         self.post = self.client.fetchPostAndRelated(self.postId)
-        self.renderer.status("Post fetched, drawing...")
+        if display_status:
+            self.renderer.status("Post fetched, drawing...")
 
+        self._formatPost()
+
+    def _formatPost(self) -> None:
         if self.post:
             # Now, format each post into it's own component.
             self.posts = self._get_posts(self.post)
@@ -1085,22 +1089,37 @@ class PostViewComponent(_PostDisplayComponent):
 
         elif inputVal == b"e":
             # Edit current reply action.
-            if self.post and not self.post["reblog"]:
-                self.drawn = False
-                self.properties['last_post'] = None
-                return SwapScreenAction(spawnPostScreen, edit=self.post, exitMessage="Drawing...")
+            if self.post:
+                if not self.post["reblog"] and self.post['account']['id'] == self.properties["account"]["id"]:
+                    target = self.post
+                elif self.post["reblog"] and self.post['reblog']['account']['id'] == self.properties["account"]["id"]:
+                    target = self.post['reblog']
+                else:
+                    target = None
+
+                if target:
+                    self.drawn = False
+                    self.properties['last_post'] = None
+                    return SwapScreenAction(spawnPostScreen, edit=target, exitMessage="Drawing...")
 
             return NullAction()
 
         elif inputVal == b"d":
+            # Delete current reply action.
             if self.post:
-                # Delete current reply action.
-                if self.post['account']['id'] == self.properties["account"]["id"]:
+                if not self.post["reblog"] and self.post['account']['id'] == self.properties["account"]["id"]:
+                    target = self.post
+                elif self.post["reblog"] and self.post['reblog']['account']['id'] == self.properties["account"]["id"]:
+                    target = self.post['reblog']
+                else:
+                    target = None
+
+                if target:
                     def yes() -> None:
                         self.renderer.status("Deleting post...")
-                        self.client.deletePost(self.post)  # type: ignore
+                        self.client.deletePost(target)  # type: ignore
                         self.properties['last_post'] = None
-                        self._fetchPostFromId()
+                        self._fetchPostFromId(display_status=False)
                         self.drawn = False
 
                     def no() -> None:
@@ -1113,6 +1132,40 @@ class PostViewComponent(_PostDisplayComponent):
                         yes=yes,
                         no=no,
                     )
+
+            return NullAction()
+
+        elif inputVal == b"b":
+            # Boost or unboost current reply action.
+            if self.post:
+                target = self.post['reblog']
+                if not target:
+                    target = self.post
+
+                self.properties['last_post'] = None
+
+                if target['reblogged']:
+                    # Need to unboost this.
+                    self.renderer.status("Unboosting post...")
+                    update = self.client.unboostPost(target)
+                    self.post['reblogged'] = update['reblogged']
+                    self.post['reblogs_count'] = update['reblogs_count']
+                    action = "unboosted"
+                else:
+                    # Need to boost this
+                    self.renderer.status("Boosting post...")
+                    update = self.client.boostPost(target)
+
+                    reblog = update['reblog']
+                    if reblog:
+                        self.post['reblogged'] = reblog['reblogged']
+                        self.post['reblogs_count'] = reblog['reblogs_count']
+                    action = "boosted"
+
+                self._formatPost()
+                self.drawn = False
+                self.renderer.status(f"Post {action}, drawing...")
+                self.draw()
 
             return NullAction()
 

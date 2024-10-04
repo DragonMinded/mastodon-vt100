@@ -318,3 +318,17 @@ class Client:
             StatusDict,
             self.__client.status_delete(post)
         )
+
+    def boostPost(self, post: StatusDict) -> StatusDict:
+        self.__assert_valid()
+        return cast(
+            StatusDict,
+            self.__client.status_reblog(post)
+        )
+
+    def unboostPost(self, post: StatusDict) -> StatusDict:
+        self.__assert_valid()
+        return cast(
+            StatusDict,
+            self.__client.status_unreblog(post)
+        )
