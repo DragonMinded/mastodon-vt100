@@ -304,20 +304,26 @@ class Client:
             self.__client.status_post(status, visibility=visStr, spoiler_text=cw, in_reply_to_id=inReplyTo),
         )
 
-    def updatePost(self, post: StatusDict, status: str, *, cw: Optional[str] = None) -> StatusDict:
+    def updatePost(self, post: StatusDict, status: str, *, cw: Optional[str] = None) -> Optional[StatusDict]:
         self.__assert_valid()
 
-        return cast(
-            StatusDict,
-            self.__client.status_update(post, status, spoiler_text=cw),
-        )
+        try:
+            return cast(
+                StatusDict,
+                self.__client.status_update(post, status, spoiler_text=cw),
+            )
+        except MastodonNotFoundError:
+            return None
 
-    def deletePost(self, post: StatusDict) -> StatusDict:
+    def deletePost(self, post: StatusDict) -> Optional[StatusDict]:
         self.__assert_valid()
-        return cast(
-            StatusDict,
-            self.__client.status_delete(post)
-        )
+        try:
+            return cast(
+                StatusDict,
+                self.__client.status_delete(post)
+            )
+        except MastodonNotFoundError:
+            return None
 
     def boostPost(self, post: StatusDict) -> StatusDict:
         self.__assert_valid()

@@ -961,16 +961,9 @@ class PostViewComponent(_PostDisplayComponent):
 
         return posts
 
-    def draw(self) -> None:
-        # If we're redrawing and there is a last post, it means we just replied. So, replace
-        # our view with this new one and load it before drawing.
-        if self.properties.get('last_post'):
-            self.postId = self.properties['last_post']['id']  # type: ignore
-            self.properties['last_post'] = None
-            self._fetchPostFromId()
-
+    def _draw(self) -> None:
         if self.post:
-            self._draw()
+            super(PostViewComponent, self)._draw()
         else:
             text, codes = highlight("The requested post could not be found. It may have been deleted by the author.")
             textlines = wordwrap(text, codes, self.renderer.columns - 2)
@@ -995,6 +988,16 @@ class PostViewComponent(_PostDisplayComponent):
 
             self.renderer.terminal.moveCursor(self.bottom, self.renderer.terminal.columns)
 
+    def draw(self) -> None:
+        # If we're redrawing and there is a last post, it means we just replied. So, replace
+        # our view with this new one and load it before drawing.
+        if self.properties.get('last_post'):
+            self.postId = self.properties['last_post']['id']  # type: ignore
+            self.properties['last_post'] = None
+            self._fetchPostFromId()
+
+        self._draw()
+
         if not self.drawn:
             self.drawn = True
             self.renderer.status("Press '?' for help.")
@@ -1009,63 +1012,65 @@ class PostViewComponent(_PostDisplayComponent):
 
         elif inputVal == Terminal.UP:
             # Scroll up one line.
-            if self.offset > 0:
-                self.offset -= 1
+            if self.post:
+                if self.offset > 0:
+                    self.offset -= 1
 
-                newPositions = self._postIndexes()
-                postNumberRedraw = list(self.positions.values()) != list(
-                    newPositions.values()
-                )
-                self.positions = newPositions
+                    newPositions = self._postIndexes()
+                    postNumberRedraw = list(self.positions.values()) != list(
+                        newPositions.values()
+                    )
+                    self.positions = newPositions
 
-                self.terminal.sendCommand(Terminal.SAVE_CURSOR)
-                self.terminal.moveCursor(self.top, 1)
-                self.terminal.setScrollRegion(self.top, self.bottom)
-                self.terminal.sendCommand(Terminal.MOVE_CURSOR_UP)
-                self.terminal.clearScrollRegion()
+                    self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+                    self.terminal.moveCursor(self.top, 1)
+                    self.terminal.setScrollRegion(self.top, self.bottom)
+                    self.terminal.sendCommand(Terminal.MOVE_CURSOR_UP)
+                    self.terminal.clearScrollRegion()
 
-                # Redraw post numbers if necessary.
-                if postNumberRedraw:
-                    for line in self.positions.keys():
-                        if line <= self.top:
-                            continue
-                        if line > self.bottom:
-                            continue
-                        self._drawOneLine(line)
+                    # Redraw post numbers if necessary.
+                    if postNumberRedraw:
+                        for line in self.positions.keys():
+                            if line <= self.top:
+                                continue
+                            if line > self.bottom:
+                                continue
+                            self._drawOneLine(line)
 
-                self._drawOneLine(self.top)
-                self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
+                    self._drawOneLine(self.top)
+                    self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
 
             return NullAction()
 
         elif inputVal == Terminal.DOWN:
             # Scroll down one line.
-            if self.offset < self.limit:
-                self.offset += 1
+            if self.post:
+                if self.offset < self.limit:
+                    self.offset += 1
 
-                newPositions = self._postIndexes()
-                postNumberRedraw = list(self.positions.values()) != list(
-                    newPositions.values()
-                )
-                self.positions = newPositions
+                    newPositions = self._postIndexes()
+                    postNumberRedraw = list(self.positions.values()) != list(
+                        newPositions.values()
+                    )
+                    self.positions = newPositions
 
-                self.terminal.sendCommand(Terminal.SAVE_CURSOR)
-                self.terminal.setScrollRegion(self.top, self.bottom)
-                self.terminal.moveCursor((self.bottom - self.top) + 1, 1)
-                self.terminal.sendCommand(Terminal.MOVE_CURSOR_DOWN)
-                self.terminal.clearScrollRegion()
+                    self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+                    self.terminal.setScrollRegion(self.top, self.bottom)
+                    self.terminal.moveCursor((self.bottom - self.top) + 1, 1)
+                    self.terminal.sendCommand(Terminal.MOVE_CURSOR_DOWN)
+                    self.terminal.clearScrollRegion()
 
-                # Redraw post numbers if necessary.
-                if postNumberRedraw:
-                    for line in self.positions.keys():
-                        if line < self.top:
-                            continue
-                        if line >= self.bottom:
-                            continue
-                        self._drawOneLine(line)
+                    # Redraw post numbers if necessary.
+                    if postNumberRedraw:
+                        for line in self.positions.keys():
+                            if line < self.top:
+                                continue
+                            if line >= self.bottom:
+                                continue
+                            self._drawOneLine(line)
 
-                self._drawOneLine(self.bottom)
-                self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
+                    self._drawOneLine(self.bottom)
+                    self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
 
             return NullAction()
 
@@ -1319,12 +1324,13 @@ class PostViewComponent(_PostDisplayComponent):
 
         elif inputVal == b"r":
             # Refresh post action
-            self.renderer.status("Refetching post and replies...")
-            self._fetchPostFromId()
+            if self.post:
+                self.renderer.status("Refetching post and replies...")
+                self._fetchPostFromId()
 
-            # Now, draw them.
-            self._draw()
-            self.renderer.status("Press '?' for help.")
+                # Now, draw them.
+                self._draw()
+                self.renderer.status("Press '?' for help.")
 
             return NullAction()
 
@@ -1709,7 +1715,12 @@ class ComposePostComponent(Component):
                     raise Exception("Logic error, couldn't map visibility!")
 
                 if self.edit:
-                    self.properties['last_post'] = self.client.updatePost(self.edit, status, cw=cw)
+                    edited = self.client.updatePost(self.edit, status, cw=cw)
+                    if edited:
+                        self.properties['last_post'] = edited
+                    else:
+                        # Was deleted while under edit, trigger the parent to delete.
+                        self.properties['last_post'] = self.edit
                     self.renderer.status("Existing status updated! Drawing...")
                 else:
                     self.properties['last_post'] = self.client.createPost(status, visibility, inReplyTo=self.inReplyTo, cw=cw)
