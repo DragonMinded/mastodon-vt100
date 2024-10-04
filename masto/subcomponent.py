@@ -293,6 +293,35 @@ class TimelinePost:
         display(self.renderer.terminal, self.lines[offset:], bounds)
 
 
+class PlaceholderPost:
+    def __init__(self, renderer: "Renderer", caption: str) -> None:
+        self.renderer = renderer
+        self.caption = caption
+        self.width = renderer.columns
+        self.lines = self.__format_lines()
+        self.height = len(self.lines)
+
+    def __format_lines(self) -> List[Tuple[str, List[ControlCodes]]]:
+        # Format postbody
+        text, codes = highlight(self.caption)
+        textlines = wordwrap(text, codes, self.width - 2)
+
+        # Now, surround the post in a box.
+        formattedlines = [
+            boxtop(self.width),
+            *[boxmiddle(line, self.width) for line in textlines],
+            boxbottom(self.width),
+        ]
+
+        return formattedlines
+
+    def draw(self, top: int, bottom: int, offset: int, postno: Optional[int]) -> None:
+        bounds = BoundingRectangle(
+            top=top, bottom=bottom + 1, left=1, right=self.renderer.columns + 1
+        )
+        display(self.renderer.terminal, self.lines[offset:], bounds)
+
+
 class Focusable(ABC):
     def processInput(self, inputVal: bytes) -> Optional[Action]: ...
 

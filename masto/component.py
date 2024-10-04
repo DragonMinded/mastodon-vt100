@@ -1,7 +1,7 @@
 import emoji
 from vtpy import Terminal
 
-from typing import Callable, Dict, List, Optional, Set, Tuple
+from typing import Callable, Dict, List, Optional, Set, Tuple, Union
 
 from .action import (
     Action,
@@ -23,6 +23,7 @@ from .drawhelpers import (
 from .renderer import Renderer, SystemProperties
 from .subcomponent import (
     TimelinePost,
+    PlaceholderPost,
     PostThreadInfo,
     FocusWrapper,
     Button,
@@ -73,6 +74,7 @@ class TimelineTabsComponent(Component):
             Timeline.HOME: "[H]ome",
             Timeline.LOCAL: "[L]ocal",
             Timeline.PUBLIC: "[G]lobal",
+            Timeline.BOOKMARKS: "[S]aved",
         }
 
     def draw(self) -> None:
@@ -107,6 +109,7 @@ class TimelineTabsComponent(Component):
                 "<b>h</b> view your home timeline<br />",
                 "<b>l</b> view your local instance timeline<br />",
                 "<b>g</b> view the global timeline<br />",
+                "<b>s</b> view your saved bookmarks<br />",
                 "<br />",
                 "<u>Navigation</u><br />",
                 "<b>[up]</b> and <b>[down]</b> keys scroll the timeline up or down one single line.<br />",
@@ -141,12 +144,13 @@ class TimelineTabsComponent(Component):
                 spawnHTMLScreen, content=self.__get_help(), exitMessage="Drawing..."
             )
 
-        if inputVal in {b"h", b"l", b"g"}:
+        if inputVal in {b"h", b"l", b"g", b"s"}:
             # Move to tab.
             timeline = {
                 b"h": Timeline.HOME,
                 b"l": Timeline.LOCAL,
                 b"g": Timeline.PUBLIC,
+                b"s": Timeline.BOOKMARKS,
             }[inputVal]
 
             if self.timeline != timeline:
@@ -175,9 +179,14 @@ class _PostDisplayComponent(Component):
 
         # First, fetch the timeline.
         self.offset: int = 0
+        self.placeholderPost: Optional[PlaceholderPost] = None
         self.__status_lut: Dict[TimelinePost, StatusDict] = {}
         self.posts: List[TimelinePost] = []
         self.positions: Dict[int, int] = self._postIndexes()
+
+    def _add_placeholder(self, caption: str) -> int:
+        self.placeholderPost = PlaceholderPost(self.renderer, caption)
+        return self.placeholderPost.height
 
     def _get_post(self, status: StatusDict, threadInfo: Optional[PostThreadInfo] = None) -> TimelinePost:
         post = TimelinePost(self.renderer, status, threadInfo)
@@ -201,7 +210,11 @@ class _PostDisplayComponent(Component):
         # is fun to code for!
         self.renderer.terminal.moveCursor(self.top, 1)
 
-        for post in self.posts:
+        posts: List[Union[TimelinePost, PlaceholderPost]] = self.posts[:]
+        if self.placeholderPost:
+            posts.append(self.placeholderPost)
+
+        for post in posts:
             if pos >= viewHeight:
                 # Too low below the viewport.
                 break
@@ -246,7 +259,11 @@ class _PostDisplayComponent(Component):
         pos = -self.offset
         viewHeight = (self.bottom - self.top) + 1
 
-        for post in self.posts:
+        posts: List[Union[TimelinePost, PlaceholderPost]] = self.posts[:]
+        if self.placeholderPost:
+            posts.append(self.placeholderPost)
+
+        for post in posts:
             if pos >= viewHeight:
                 # Too low below the viewport.
                 break
@@ -298,7 +315,8 @@ class _PostDisplayComponent(Component):
 
             pos += post.height
 
-        return 0
+        # Bump down since we have no posts on the screen, and want to walk back to the previous one.
+        return float(cnt + 1)
 
     def _postIndexes(self) -> Dict[int, int]:
         ret: Dict[int, int] = {}
@@ -326,7 +344,6 @@ class _PostDisplayComponent(Component):
 
         for cnt, post in enumerate(self.posts):
             if cnt == postNumber:
-                # TODO: might be buggy
                 return pos + self.top
 
             pos += post.height
@@ -353,7 +370,11 @@ class TimelineComponent(_PostDisplayComponent):
 
         # First, fetch the timeline.
         self.offset = 0
-        self.statuses = self.client.fetchTimeline(self.timeline)
+        self.limit = 0xFFFFFFFF
+        self.lastFetchedPost: Optional[StatusDict] = None
+        self.lastFetchedBatch: Optional[List[StatusDict]] = None
+        self.statuses = self.fetchTimeline()
+        self.infinite = True
         self.renderer.status("Timeline fetched, drawing...")
 
         # Now, format each post into it's own component.
@@ -363,6 +384,30 @@ class TimelineComponent(_PostDisplayComponent):
         # render deep-dive numbers.
         self.positions = self._postIndexes()
         self.drawn: bool = False
+
+    def fetchTimeline(self) -> List[StatusDict]:
+        if self.timeline in {Timeline.HOME, Timeline.LOCAL, Timeline.PUBLIC}:
+            statuses = self.client.fetchTimeline(self.timeline)
+            self.lastFetchedPost = statuses[-1]
+            return statuses
+        elif self.timeline == Timeline.BOOKMARKS:
+            statuses = self.client.fetchBookmarks()
+            self.lastFetchedBatch = statuses
+            return statuses
+        else:
+            raise Exception(f"Unsupported timeline {self.timeline}!")
+
+    def fetchNextBatch(self) -> List[StatusDict]:
+        if self.timeline in {Timeline.HOME, Timeline.LOCAL, Timeline.PUBLIC}:
+            statuses = self.client.fetchTimeline(self.timeline, since=self.lastFetchedPost)
+            self.lastFetchedPost = statuses[-1]
+            return statuses
+        elif self.timeline == Timeline.BOOKMARKS:
+            statuses = self.client.fetchBookmarks(since=self.lastFetchedBatch)
+            self.lastFetchedBatch = statuses
+            return statuses
+        else:
+            raise Exception(f"Unsupported timeline {self.timeline}!")
 
     def draw(self) -> None:
         self._draw()
@@ -411,7 +456,7 @@ class TimelineComponent(_PostDisplayComponent):
 
         elif inputVal == Terminal.DOWN:
             # Scroll down one line.
-            if self.offset < 0xFFFFFFFF:
+            if self.offset < self.limit:
                 self.offset += 1
 
                 newPositions = self._postIndexes()
@@ -574,7 +619,7 @@ class TimelineComponent(_PostDisplayComponent):
             self.renderer.status("Refetching timeline...")
 
             self.offset = 0
-            self.statuses = self.client.fetchTimeline(self.timeline)
+            self.statuses = self.fetchTimeline()
             self.renderer.status("Timeline fetched, drawing...")
 
             # Now, format each post into it's own component.
@@ -729,13 +774,16 @@ class TimelineComponent(_PostDisplayComponent):
             return None
 
         # Figure out if we should load the next bit of timeline.
-        if infiniteScrollFetch:
+        if infiniteScrollFetch and self.infinite:
             self.properties['last_post'] = None
             self.renderer.status("Fetching more posts...")
 
-            newStatuses = self.client.fetchTimeline(
-                self.timeline, since=self.statuses[-1]
-            )
+            newStatuses = self.fetchNextBatch()
+            if not newStatuses:
+                # Hit the end of this timeline, so no more fetching, also limit scrolling.
+                self.infinite = False
+                placeholderHeight = self._add_placeholder("You've reached the end of this timeline, there are no more posts!")
+                self.limit = max(0, (sum([p.height for p in self.posts]) + placeholderHeight) - ((self.bottom - self.top) + 1))
 
             self.renderer.status("Additional posts fetched, drawing...")
 

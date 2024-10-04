@@ -11,6 +11,7 @@ class Timeline(Enum):
     HOME = auto()
     LOCAL = auto()
     PUBLIC = auto()
+    BOOKMARKS = auto()
 
 
 class Visibility(Enum):
@@ -169,9 +170,33 @@ class Client:
                 timeline="public", limit=limit, max_id=since
             )
         else:
-            raise Exception("Unknown timeline to fetch!")
+            raise Exception(f"Unsupported timeline {which} to fetch!")
 
         return cast(List[StatusDict], statuses)
+
+    def fetchBookmarks(
+        self,
+        *,
+        limit: int = 20,
+        since: Optional[List[StatusDict]] = None,
+    ) -> List[StatusDict]:
+        self.__assert_valid()
+
+        if since is not None:
+            if since:
+                nextPage = self.__client.fetch_next(since)
+                if nextPage:
+                    return cast(List[StatusDict], nextPage)
+                else:
+                    return []
+            else:
+                # The previous fetch was empty.
+                return []
+        else:
+            return cast(
+                List[StatusDict],
+                self.__client.bookmarks(limit=limit),
+            )
 
     def fetchPost(self, postId: int) -> Optional[StatusDict]:
         self.__assert_valid()
