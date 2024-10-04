@@ -325,30 +325,42 @@ class Client:
         except MastodonNotFoundError:
             return None
 
-    def boostPost(self, post: StatusDict) -> StatusDict:
+    def boostPost(self, post: StatusDict) -> Optional[StatusDict]:
         self.__assert_valid()
-        return cast(
-            StatusDict,
-            self.__client.status_reblog(post)
-        )
+        try:
+            return cast(
+                StatusDict,
+                self.__client.status_reblog(post)
+            )
+        except MastodonNotFoundError:
+            return None
 
-    def unboostPost(self, post: StatusDict) -> StatusDict:
+    def unboostPost(self, post: StatusDict) -> Optional[StatusDict]:
         self.__assert_valid()
-        return cast(
-            StatusDict,
-            self.__client.status_unreblog(post)
-        )
+        try:
+            return cast(
+                StatusDict,
+                self.__client.status_unreblog(post)
+            )
+        except MastodonNotFoundError:
+            return None
 
-    def likePost(self, post: StatusDict) -> StatusDict:
+    def likePost(self, post: StatusDict) -> Optional[StatusDict]:
         self.__assert_valid()
-        return cast(
-            StatusDict,
-            self.__client.status_favourite(post)
-        )
+        try:
+            return cast(
+                StatusDict,
+                self.__client.status_favourite(post)
+            )
+        except MastodonNotFoundError:
+            return None
 
-    def unlikePost(self, post: StatusDict) -> StatusDict:
+    def unlikePost(self, post: StatusDict) -> Optional[StatusDict]:
         self.__assert_valid()
-        return cast(
-            StatusDict,
-            self.__client.status_unfavourite(post)
-        )
+        try:
+            return cast(
+                StatusDict,
+                self.__client.status_unfavourite(post)
+            )
+        except MastodonNotFoundError:
+            return None

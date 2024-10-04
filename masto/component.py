@@ -1153,23 +1153,31 @@ class PostViewComponent(_PostDisplayComponent):
                     # Need to unboost this.
                     self.renderer.status("Unboosting post...")
                     update = self.client.unboostPost(target)
-                    self.post['reblogged'] = update['reblogged']
-                    self.post['reblogs_count'] = update['reblogs_count']
-                    action = "unboosted"
+
+                    if update:
+                        self.post['reblogged'] = update['reblogged']
+                        self.post['reblogs_count'] = update['reblogs_count']
+                        action = "unboosted"
                 else:
                     # Need to boost this
                     self.renderer.status("Boosting post...")
                     update = self.client.boostPost(target)
 
-                    reblog = update['reblog']
-                    if reblog:
-                        self.post['reblogged'] = reblog['reblogged']
-                        self.post['reblogs_count'] = reblog['reblogs_count']
-                    action = "boosted"
+                    if update:
+                        reblog = update['reblog']
+                        if reblog:
+                            self.post['reblogged'] = reblog['reblogged']
+                            self.post['reblogs_count'] = reblog['reblogs_count']
+                        action = "boosted"
 
-                self._formatPost()
+                if update:
+                    self._formatPost()
+                    self.renderer.status(f"Post {action}, drawing...")
+                else:
+                    # It was deleted mid-boost.
+                    self._fetchPostFromId(display_status=False)
+
                 self.drawn = False
-                self.renderer.status(f"Post {action}, drawing...")
                 self.draw()
 
             return NullAction()
@@ -1194,17 +1202,22 @@ class PostViewComponent(_PostDisplayComponent):
                     update = self.client.likePost(target)
                     action = "liked"
 
-                reblog = update['reblog']
-                if reblog:
-                    self.post['favourited'] = reblog['favourited']
-                    self.post['favourites_count'] = reblog['favourites_count']
-                else:
-                    self.post['favourited'] = update['favourited']
-                    self.post['favourites_count'] = update['favourites_count']
+                if update:
+                    reblog = update['reblog']
+                    if reblog:
+                        self.post['favourited'] = reblog['favourited']
+                        self.post['favourites_count'] = reblog['favourites_count']
+                    else:
+                        self.post['favourited'] = update['favourited']
+                        self.post['favourites_count'] = update['favourites_count']
 
-                self._formatPost()
+                    self._formatPost()
+                    self.renderer.status(f"Post {action}, drawing...")
+                else:
+                    # It was deleted mid-like.
+                    self._fetchPostFromId(display_status=False)
+
                 self.drawn = False
-                self.renderer.status(f"Post {action}, drawing...")
                 self.draw()
 
             return NullAction()
