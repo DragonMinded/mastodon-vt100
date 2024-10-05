@@ -3,7 +3,7 @@ from distutils.core import setup
 
 setup(
     name="mastodon-vt100",
-    version="0.1.5",
+    version="0.2.0",
     description="VT-100 Mastodon Client",
     author="DragonMinded",
     license="Public Domain",
