@@ -1203,8 +1203,8 @@ class PostViewComponent(_PostDisplayComponent):
                     update = self.client.unboostPost(target)
 
                     if update:
-                        self.post['reblogged'] = update['reblogged']
-                        self.post['reblogs_count'] = update['reblogs_count']
+                        target['reblogged'] = update['reblogged']
+                        target['reblogs_count'] = update['reblogs_count']
                         action = "unboosted"
                 else:
                     # Need to boost this
@@ -1214,8 +1214,8 @@ class PostViewComponent(_PostDisplayComponent):
                     if update:
                         reblog = update['reblog']
                         if reblog:
-                            self.post['reblogged'] = reblog['reblogged']
-                            self.post['reblogs_count'] = reblog['reblogs_count']
+                            target['reblogged'] = reblog['reblogged']
+                            target['reblogs_count'] = reblog['reblogs_count']
                         action = "boosted"
 
                 if update:
@@ -1253,16 +1253,54 @@ class PostViewComponent(_PostDisplayComponent):
                 if update:
                     reblog = update['reblog']
                     if reblog:
-                        self.post['favourited'] = reblog['favourited']
-                        self.post['favourites_count'] = reblog['favourites_count']
+                        target['favourited'] = reblog['favourited']
+                        target['favourites_count'] = reblog['favourites_count']
                     else:
-                        self.post['favourited'] = update['favourited']
-                        self.post['favourites_count'] = update['favourites_count']
+                        target['favourited'] = update['favourited']
+                        target['favourites_count'] = update['favourites_count']
 
                     self._formatPost()
                     self.renderer.status(f"Post {action}, drawing...")
                 else:
                     # It was deleted mid-like.
+                    self._fetchPostFromId(display_status=False)
+
+                self.drawn = False
+                self.draw()
+
+            return NullAction()
+
+        elif inputVal == b"s":
+            # Save or unsave current reply action.
+            if self.post:
+                target = self.post['reblog']
+                if not target:
+                    target = self.post
+
+                self.properties['last_post'] = None
+
+                if target['bookmarked']:
+                    # Need to unsave this.
+                    self.renderer.status("Unsaving post...")
+                    update = self.client.unsavePost(target)
+                    action = "unsaved"
+                else:
+                    # Need to save this
+                    self.renderer.status("Saving post...")
+                    update = self.client.savePost(target)
+                    action = "saved"
+
+                if update:
+                    reblog = update['reblog']
+                    if reblog:
+                        target['bookmarked'] = reblog['bookmarked']
+                    else:
+                        target['bookmarked'] = update['bookmarked']
+
+                    self._formatPost()
+                    self.renderer.status(f"Post {action}, drawing...")
+                else:
+                    # It was deleted mid-save.
                     self._fetchPostFromId(display_status=False)
 
                 self.drawn = False
@@ -2301,7 +2339,14 @@ def spawnTimelineScreen(
 def spawnPostAndRepliesScreen(
     renderer: Renderer, *, post: Optional[StatusDict] = None
 ) -> None:
-    renderer.push([PostViewComponent(renderer, top=1, bottom=renderer.rows, postId=post['id'] if post else 0)])
+    if post:
+        if post['reblog']:
+            postId = post['reblog']['id']
+        else:
+            postId = post['id']
+    else:
+        postId = 0
+    renderer.push([PostViewComponent(renderer, top=1, bottom=renderer.rows, postId=postId)])
 
 
 def spawnPostScreen(renderer: Renderer, edit: Optional[StatusDict] = None, replyTo: Optional[StatusDict] = None, exitMessage: str = "") -> None:

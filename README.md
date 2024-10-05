@@ -11,12 +11,11 @@ Right now this is a fairly rudimentary client. The following features are presen
 - Saved bookmark list, with all the features of any other timeline.
 - Infinite scroll, where additional posts are fetched when you hit the bottom of a timeline.
 - Composer box, supporting the ability to post or reply with an optional CW and choosing the visibility.
-- Individual post/thread view, supporting the ability to edit/delete your own posts, and ability to interact with other posts such as replying, liking or boosting.
+- Individual post/thread view, supporting the ability to edit/delete your own posts, and ability to interact with other posts such as replying, liking, boosting or bookmarking.
 - Preference respecting for CW auto-expansion and composer default post visibility.
 
 What doesn't work that I would like to get to at some point:
 
-- Ability to bookmark a post from the focus view.
 - User profile view with profile, pinned posts and user timeline display.
 - Conversation/private messaging support.
 - Additional formatting support for the post renderer.

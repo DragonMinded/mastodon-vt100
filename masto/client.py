@@ -389,3 +389,23 @@ class Client:
             )
         except MastodonNotFoundError:
             return None
+
+    def savePost(self, post: StatusDict) -> Optional[StatusDict]:
+        self.__assert_valid()
+        try:
+            return cast(
+                StatusDict,
+                self.__client.status_bookmark(post)
+            )
+        except MastodonNotFoundError:
+            return None
+
+    def unsavePost(self, post: StatusDict) -> Optional[StatusDict]:
+        self.__assert_valid()
+        try:
+            return cast(
+                StatusDict,
+                self.__client.status_unbookmark(post)
+            )
+        except MastodonNotFoundError:
+            return None
